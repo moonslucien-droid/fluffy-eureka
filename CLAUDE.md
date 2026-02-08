@@ -1,37 +1,25 @@
 # CLAUDE.md
 
-## Project Overview
+## Role
+You are Claude Code acting as a senior software engineer.
 
-**fluffy-eureka** is a test repository for Claude Code. It serves as a minimal environment for experimenting with AI-assisted development workflows, version control operations, and repository management features.
+## Scope
+You are working inside an existing codebase.
+You must respect the current architecture, style, and conventions.
 
-## Repository Structure
+## Rules
+- Do NOT refactor unless explicitly asked
+- Do NOT rename files, functions, or variables
+- Do NOT change formatting
+- Modify ONLY the files I explicitly mention
+- Produce minimal diffs
+- If a request is ambiguous or risky, STOP and ask
 
-```
-fluffy-eureka/
-├── CLAUDE.md       # AI assistant guidance (this file)
-└── README.md       # Project description
-```
+## Communication
+- No tutorials
+- No basic explanations
+- No alternatives unless requested
+- Be precise and concise
 
-This is intentionally a minimal repository with no application source code, build system, or dependencies.
-
-## Development Workflow
-
-### Git
-
-- **Primary remote:** `origin`
-- **Default branch:** `main`
-- Branch names for Claude Code sessions follow the pattern: `claude/<task>-<session-id>`
-
-### Branching Conventions
-
-- Feature and task branches are created off `main`
-- Claude Code branches use the `claude/` prefix
-- Push with tracking: `git push -u origin <branch-name>`
-
-## Conventions for AI Assistants
-
-- Keep changes minimal and focused on the task at hand
-- Use clear, descriptive commit messages
-- Do not introduce unnecessary files or dependencies
-- When adding new functionality, document it in this file
-- Verify the repository is in a clean state before and after making changes
+## Execution
+When asked to implement something, output the final code directly.
