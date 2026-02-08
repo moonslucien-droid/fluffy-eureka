@@ -1,0 +1,705 @@
+{
+  "base": {
+    "name": "ES_Patrimoine",
+    "description": "Editorial database for Spanish heritage places — Lucas Lunes editorial pipeline"
+  },
+  "tables": [
+    {
+      "name": "Places",
+      "description": "Main table for heritage places in Spain. Each record represents one place moving through the editorial pipeline.",
+      "fields": [
+        {
+          "name": "place_id",
+          "type": "autonumber",
+          "description": "Auto-generated unique identifier"
+        },
+        {
+          "name": "place_name",
+          "type": "singleLineText",
+          "description": "Name of the heritage place as extracted from source"
+        },
+        {
+          "name": "source_url",
+          "type": "url",
+          "description": "Original URL from arteviajero.com"
+        },
+        {
+          "name": "category",
+          "type": "singleSelect",
+          "description": "Heritage category",
+          "options": {
+            "choices": [
+              "Iglesia",
+              "Catedral",
+              "Monasterio",
+              "Castillo",
+              "Palacio",
+              "Puente",
+              "Muralla",
+              "Plaza",
+              "Barrio histórico",
+              "Yacimiento arqueológico",
+              "Museo",
+              "Ermita",
+              "Convento",
+              "Torre",
+              "Fuente",
+              "Ruinas",
+              "Otro"
+            ]
+          }
+        },
+        {
+          "name": "city",
+          "type": "singleLineText",
+          "description": "City or town where the place is located"
+        },
+        {
+          "name": "region",
+          "type": "singleSelect",
+          "description": "Spanish autonomous community",
+          "options": {
+            "choices": [
+              "Andalucía",
+              "Aragón",
+              "Asturias",
+              "Baleares",
+              "Canarias",
+              "Cantabria",
+              "Castilla-La Mancha",
+              "Castilla y León",
+              "Cataluña",
+              "Comunidad Valenciana",
+              "Extremadura",
+              "Galicia",
+              "La Rioja",
+              "Madrid",
+              "Murcia",
+              "Navarra",
+              "País Vasco"
+            ]
+          }
+        },
+        {
+          "name": "country",
+          "type": "singleLineText",
+          "description": "Always 'ES' for this base",
+          "default": "ES"
+        },
+        {
+          "name": "raw_text",
+          "type": "multilineText",
+          "description": "Raw text content scraped from source. Unmodified. No AI rewriting."
+        },
+        {
+          "name": "source_image_urls",
+          "type": "multilineText",
+          "description": "Image URLs from the source page, one per line"
+        },
+        {
+          "name": "status",
+          "type": "singleSelect",
+          "description": "Current position in the editorial pipeline",
+          "options": {
+            "choices": [
+              "SCRAPED_RAW",
+              "SCRAPE_FAILED",
+              "PLACE_VALIDATED",
+              "PLACE_REJECTED",
+              "RESEARCH_READY",
+              "RESEARCH_VALIDATED",
+              "RESEARCH_REJECTED",
+              "ARTICLE_DRAFT",
+              "ARTICLE_VALIDATED",
+              "ARTICLE_REJECTED",
+              "IMAGE_GENERATED",
+              "IMAGE_APPROVED",
+              "IMAGE_REJECTED",
+              "CANONICAL_SCHEDULED",
+              "CANONICAL_PUBLISHED",
+              "PUBLISH_FAILED",
+              "SOCIAL_DRAFT",
+              "SOCIAL_VALIDATED",
+              "SOCIAL_SCHEDULED",
+              "SOCIAL_PUBLISHED",
+              "SOCIAL_FAILED",
+              "COMPLETE",
+              "AI_ERROR",
+              "ON_HOLD"
+            ]
+          }
+        },
+        {
+          "name": "human_validated",
+          "type": "checkbox",
+          "description": "Whether the place has been validated by a human editor"
+        },
+        {
+          "name": "human_validator",
+          "type": "singleLineText",
+          "description": "Name or identifier of the human who validated"
+        },
+        {
+          "name": "validation_notes",
+          "type": "multilineText",
+          "description": "Human editor notes during validation"
+        },
+        {
+          "name": "scraped_at",
+          "type": "dateTime",
+          "description": "Timestamp of initial scraping",
+          "options": {
+            "dateFormat": "ISO",
+            "timeFormat": "24h",
+            "timeZone": "Europe/Paris"
+          }
+        },
+        {
+          "name": "research_dossier",
+          "type": "multilineText",
+          "description": "AI-generated historical research dossier (Markdown). NOT a narrative article."
+        },
+        {
+          "name": "historical_sources",
+          "type": "multilineText",
+          "description": "URLs and references cited in the research dossier, one per line"
+        },
+        {
+          "name": "uncertainty_flags",
+          "type": "multilineText",
+          "description": "Facts or claims in the research that require human verification"
+        },
+        {
+          "name": "women_figures",
+          "type": "multilineText",
+          "description": "Women figures linked to the place, extracted during research"
+        },
+        {
+          "name": "religious_figures",
+          "type": "multilineText",
+          "description": "Religious figures and orders linked to the place"
+        },
+        {
+          "name": "researched_at",
+          "type": "dateTime",
+          "description": "Timestamp of research dossier generation",
+          "options": {
+            "dateFormat": "ISO",
+            "timeFormat": "24h",
+            "timeZone": "Europe/Paris"
+          }
+        },
+        {
+          "name": "research_validated_by",
+          "type": "singleLineText",
+          "description": "Human who validated the research dossier"
+        },
+        {
+          "name": "research_validation_notes",
+          "type": "multilineText",
+          "description": "Corrections or notes from research validation"
+        },
+        {
+          "name": "article_markdown",
+          "type": "multilineText",
+          "description": "Full narrative article in Markdown, written in Lucas Lunes voice"
+        },
+        {
+          "name": "seo_title",
+          "type": "singleLineText",
+          "description": "SEO title for the article (max 60 characters)"
+        },
+        {
+          "name": "slug",
+          "type": "singleLineText",
+          "description": "URL-safe slug for the article"
+        },
+        {
+          "name": "meta_title",
+          "type": "singleLineText",
+          "description": "Meta title tag content (max 60 characters)"
+        },
+        {
+          "name": "meta_description",
+          "type": "singleLineText",
+          "description": "Meta description tag content (max 155 characters)"
+        },
+        {
+          "name": "ritual_opening",
+          "type": "singleLineText",
+          "description": "Country-specific ritual opening line for the article"
+        },
+        {
+          "name": "drafted_at",
+          "type": "dateTime",
+          "description": "Timestamp of article draft generation",
+          "options": {
+            "dateFormat": "ISO",
+            "timeFormat": "24h",
+            "timeZone": "Europe/Paris"
+          }
+        },
+        {
+          "name": "article_validated_by",
+          "type": "singleLineText",
+          "description": "Human who validated and corrected the article"
+        },
+        {
+          "name": "article_validation_notes",
+          "type": "multilineText",
+          "description": "Corrections and editorial notes from article validation"
+        },
+        {
+          "name": "generated_image",
+          "type": "attachment",
+          "description": "AI-generated image (DALL·E)"
+        },
+        {
+          "name": "manual_image",
+          "type": "attachment",
+          "description": "Manually created artistic image (Nanabana Pro override)"
+        },
+        {
+          "name": "image_prompt_used",
+          "type": "multilineText",
+          "description": "The prompt used to generate the DALL·E image"
+        },
+        {
+          "name": "alt_text",
+          "type": "singleLineText",
+          "description": "SEO-friendly alt text for the image (max 125 chars)"
+        },
+        {
+          "name": "image_source",
+          "type": "singleSelect",
+          "description": "Whether the final image is automated or manually overridden",
+          "options": {
+            "choices": [
+              "automated",
+              "manual_override"
+            ]
+          }
+        },
+        {
+          "name": "image_generated_at",
+          "type": "dateTime",
+          "description": "Timestamp of image generation",
+          "options": {
+            "dateFormat": "ISO",
+            "timeFormat": "24h",
+            "timeZone": "Europe/Paris"
+          }
+        },
+        {
+          "name": "image_validated_by",
+          "type": "singleLineText",
+          "description": "Human who approved the image"
+        },
+        {
+          "name": "canonical_url",
+          "type": "url",
+          "description": "URL of the published canonical article"
+        },
+        {
+          "name": "publication_platform",
+          "type": "singleSelect",
+          "description": "Platform where the canonical article is published",
+          "options": {
+            "choices": [
+              "substack",
+              "webflow"
+            ]
+          }
+        },
+        {
+          "name": "publication_date",
+          "type": "dateTime",
+          "description": "Scheduled or actual publication date",
+          "options": {
+            "dateFormat": "ISO",
+            "timeFormat": "24h",
+            "timeZone": "Europe/Paris"
+          }
+        },
+        {
+          "name": "published_at",
+          "type": "dateTime",
+          "description": "Actual timestamp when article went live",
+          "options": {
+            "dateFormat": "ISO",
+            "timeFormat": "24h",
+            "timeZone": "Europe/Paris"
+          }
+        },
+        {
+          "name": "social_copy_facebook",
+          "type": "multilineText",
+          "description": "Native Facebook post text (no link)"
+        },
+        {
+          "name": "social_copy_instagram",
+          "type": "multilineText",
+          "description": "Native Instagram caption with hashtags (no link)"
+        },
+        {
+          "name": "social_comment_link",
+          "type": "multilineText",
+          "description": "Comment text containing the article link, posted 1 hour after social post"
+        },
+        {
+          "name": "social_fb_post_id",
+          "type": "singleLineText",
+          "description": "Facebook post ID for the delayed comment"
+        },
+        {
+          "name": "social_ig_media_id",
+          "type": "singleLineText",
+          "description": "Instagram media ID for the delayed comment"
+        },
+        {
+          "name": "social_schedule_date",
+          "type": "dateTime",
+          "description": "Scheduled date for social publication",
+          "options": {
+            "dateFormat": "ISO",
+            "timeFormat": "24h",
+            "timeZone": "Europe/Paris"
+          }
+        },
+        {
+          "name": "social_published_at",
+          "type": "dateTime",
+          "description": "Actual timestamp of social publication",
+          "options": {
+            "dateFormat": "ISO",
+            "timeFormat": "24h",
+            "timeZone": "Europe/Paris"
+          }
+        },
+        {
+          "name": "lieu_majeur_score",
+          "type": "number",
+          "description": "Composite editorial priority score (0–100)",
+          "options": {
+            "precision": 0
+          }
+        },
+        {
+          "name": "score_historical",
+          "type": "number",
+          "description": "Historical importance sub-score (0–30)",
+          "options": {
+            "precision": 0
+          }
+        },
+        {
+          "name": "score_narrative",
+          "type": "number",
+          "description": "Human & narrative density sub-score (0–25)",
+          "options": {
+            "precision": 0
+          }
+        },
+        {
+          "name": "score_lucas_potential",
+          "type": "number",
+          "description": "Lucas Lunes narrative potential sub-score (0–25)",
+          "options": {
+            "precision": 0
+          }
+        },
+        {
+          "name": "score_seo",
+          "type": "number",
+          "description": "SEO & catalog coherence sub-score (0–20)",
+          "options": {
+            "precision": 0
+          }
+        },
+        {
+          "name": "scoring_rationale",
+          "type": "multilineText",
+          "description": "Brief AI-generated explanation of the score"
+        },
+        {
+          "name": "score_human_override",
+          "type": "number",
+          "description": "Optional human override of the lieu_majeur_score",
+          "options": {
+            "precision": 0
+          }
+        },
+        {
+          "name": "scored_at",
+          "type": "dateTime",
+          "description": "Timestamp of score calculation",
+          "options": {
+            "dateFormat": "ISO",
+            "timeFormat": "24h",
+            "timeZone": "Europe/Paris"
+          }
+        },
+        {
+          "name": "ritual_date",
+          "type": "dateTime",
+          "description": "Assigned date in the 48h ritual calendar",
+          "options": {
+            "dateFormat": "ISO",
+            "timeFormat": "24h",
+            "timeZone": "Europe/Paris"
+          }
+        },
+        {
+          "name": "ritual_selected",
+          "type": "checkbox",
+          "description": "Whether this place has been selected by the ritual scheduler"
+        },
+        {
+          "name": "ritual_selected_at",
+          "type": "dateTime",
+          "description": "When the ritual scheduler selected this place",
+          "options": {
+            "dateFormat": "ISO",
+            "timeFormat": "24h",
+            "timeZone": "Europe/Paris"
+          }
+        },
+        {
+          "name": "editorial_notes",
+          "type": "multilineText",
+          "description": "General editorial notes, human comments, flags"
+        },
+        {
+          "name": "created_at",
+          "type": "createdTime",
+          "description": "Record creation timestamp"
+        },
+        {
+          "name": "last_modified",
+          "type": "lastModifiedTime",
+          "description": "Last modification timestamp"
+        }
+      ],
+      "views": [
+        {
+          "name": "Pipeline Overview",
+          "type": "grid",
+          "description": "All records grouped by status",
+          "groupBy": "status",
+          "sort": [
+            {"field": "lieu_majeur_score", "direction": "desc"}
+          ]
+        },
+        {
+          "name": "Pending Validation",
+          "type": "grid",
+          "description": "Places awaiting human validation",
+          "filter": "status = 'SCRAPED_RAW'",
+          "sort": [
+            {"field": "scraped_at", "direction": "desc"}
+          ]
+        },
+        {
+          "name": "Research Queue",
+          "type": "grid",
+          "description": "Places validated and awaiting research",
+          "filter": "status = 'PLACE_VALIDATED'",
+          "sort": [
+            {"field": "lieu_majeur_score", "direction": "desc"}
+          ]
+        },
+        {
+          "name": "Writing Queue",
+          "type": "grid",
+          "description": "Research validated, awaiting narrative writing",
+          "filter": "status = 'RESEARCH_VALIDATED'",
+          "sort": [
+            {"field": "lieu_majeur_score", "direction": "desc"}
+          ]
+        },
+        {
+          "name": "Article Review",
+          "type": "grid",
+          "description": "Draft articles awaiting human review",
+          "filter": "status = 'ARTICLE_DRAFT'",
+          "sort": [
+            {"field": "drafted_at", "direction": "desc"}
+          ]
+        },
+        {
+          "name": "Image Review",
+          "type": "grid",
+          "description": "Generated images awaiting approval",
+          "filter": "status = 'IMAGE_GENERATED'",
+          "sort": [
+            {"field": "image_generated_at", "direction": "desc"}
+          ]
+        },
+        {
+          "name": "Ready to Publish",
+          "type": "grid",
+          "description": "Fully approved articles ready for canonical publication",
+          "filter": "status = 'IMAGE_APPROVED'",
+          "sort": [
+            {"field": "lieu_majeur_score", "direction": "desc"}
+          ]
+        },
+        {
+          "name": "Ritual Calendar",
+          "type": "calendar",
+          "description": "Calendar view of the 48h publication rhythm",
+          "dateField": "ritual_date"
+        },
+        {
+          "name": "Lieu Majeur Ranking",
+          "type": "grid",
+          "description": "All validated places ranked by score",
+          "filter": "status != 'SCRAPED_RAW' AND status != 'PLACE_REJECTED'",
+          "sort": [
+            {"field": "lieu_majeur_score", "direction": "desc"}
+          ]
+        },
+        {
+          "name": "Errors & Failures",
+          "type": "grid",
+          "description": "Records in error states requiring attention",
+          "filter": "status IN ('SCRAPE_FAILED', 'AI_ERROR', 'PUBLISH_FAILED', 'SOCIAL_FAILED')"
+        },
+        {
+          "name": "By Region",
+          "type": "grid",
+          "description": "All places grouped by autonomous community",
+          "groupBy": "region",
+          "sort": [
+            {"field": "lieu_majeur_score", "direction": "desc"}
+          ]
+        },
+        {
+          "name": "Published Archive",
+          "type": "grid",
+          "description": "All completed articles",
+          "filter": "status = 'COMPLETE'",
+          "sort": [
+            {"field": "published_at", "direction": "desc"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Scraping_Errors",
+      "description": "Log table for scraping failures and retries",
+      "fields": [
+        {
+          "name": "error_id",
+          "type": "autonumber",
+          "description": "Auto-generated error identifier"
+        },
+        {
+          "name": "source_url",
+          "type": "url",
+          "description": "URL that failed to scrape"
+        },
+        {
+          "name": "error_type",
+          "type": "singleSelect",
+          "description": "Category of error",
+          "options": {
+            "choices": [
+              "HTTP_TIMEOUT",
+              "HTTP_ERROR",
+              "PARSE_ERROR",
+              "AIRTABLE_ERROR",
+              "RATE_LIMIT",
+              "UNKNOWN"
+            ]
+          }
+        },
+        {
+          "name": "error_message",
+          "type": "multilineText",
+          "description": "Full error message or stack trace"
+        },
+        {
+          "name": "retry_count",
+          "type": "number",
+          "description": "Number of retries attempted"
+        },
+        {
+          "name": "resolved",
+          "type": "checkbox",
+          "description": "Whether the error has been resolved"
+        },
+        {
+          "name": "occurred_at",
+          "type": "dateTime",
+          "description": "Timestamp of the error",
+          "options": {
+            "dateFormat": "ISO",
+            "timeFormat": "24h",
+            "timeZone": "Europe/Paris"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Editorial_Calendar",
+      "description": "Tracks the 48h ritual publication schedule",
+      "fields": [
+        {
+          "name": "calendar_id",
+          "type": "autonumber",
+          "description": "Auto-generated identifier"
+        },
+        {
+          "name": "ritual_date",
+          "type": "dateTime",
+          "description": "Publication date in the ritual calendar",
+          "options": {
+            "dateFormat": "ISO",
+            "timeFormat": "24h",
+            "timeZone": "Europe/Paris"
+          }
+        },
+        {
+          "name": "country",
+          "type": "singleSelect",
+          "description": "Country for this slot",
+          "options": {
+            "choices": ["ES", "PT"]
+          }
+        },
+        {
+          "name": "assigned_place",
+          "type": "linkedRecord",
+          "description": "Link to the Places record assigned to this slot",
+          "options": {
+            "linkedTable": "Places"
+          }
+        },
+        {
+          "name": "status",
+          "type": "singleSelect",
+          "description": "Status of this calendar slot",
+          "options": {
+            "choices": [
+              "OPEN",
+              "ASSIGNED",
+              "PUBLISHED",
+              "SKIPPED"
+            ]
+          }
+        },
+        {
+          "name": "human_override",
+          "type": "checkbox",
+          "description": "Whether a human overrode the automatic selection"
+        },
+        {
+          "name": "override_notes",
+          "type": "multilineText",
+          "description": "Notes explaining human override decision"
+        }
+      ]
+    }
+  ]
+}
