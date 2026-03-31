@@ -5,16 +5,16 @@
 // Ce script :
 //   1. Lit les lignes avec Statut = "À rédiger"
 //   2. Scrape le contenu brut depuis Arteviajero
-//   3. Génère un dossier de recherche historique (OpenAI)
-//   4. Rédige l'article dans la voix Lucas Lunes (OpenAI)
+//   3. Génère un dossier de recherche historique (Claude Opus 4.6)
+//   4. Rédige l'article dans la voix Lucas Lunes (Claude Opus 4.6)
 //   5. Remplit la colonne "Contenu Substack"
 //   6. Passe le statut à "Brouillon"
 // ============================================================
 
 var SPREADSHEET_ID = "1zKtKH2eaaR3ZNQtVsS7ECffCrubmLIkQmC2BzNek2Qk";
 var SHEET_NAME     = "Pipeline Articles";
-var OPENAI_API_KEY = ""; // À remplir : sk-...
-var OPENAI_MODEL   = "gpt-4o";
+var ANTHROPIC_API_KEY = ""; // À remplir : sk-ant-...
+var CLAUDE_MODEL     = "claude-opus-4-6";
 
 // ============================================================
 // COLONNES (index 0-based, mappées sur les en-têtes)
@@ -166,7 +166,7 @@ function scraperArteviajero(url) {
     contenu = contenu.replace(/&#\d+;/g, "");
     contenu = contenu.replace(/\s+/g, " ").trim();
 
-    // Limiter la taille pour l'API OpenAI
+    // Limiter la taille pour l'API Claude
     if (contenu.length > 8000) {
       contenu = contenu.substring(0, 8000) + "…";
     }
@@ -181,7 +181,7 @@ function scraperArteviajero(url) {
 }
 
 // ============================================================
-// RECHERCHE HISTORIQUE — OpenAI
+// RECHERCHE HISTORIQUE — Claude Opus 4.6
 // ============================================================
 function genererRechercheHistorique(contexte) {
   var systemPrompt = [
@@ -228,11 +228,11 @@ function genererRechercheHistorique(contexte) {
     contexte.contenuBrut || "(Aucun contenu source disponible)"
   ].join("\n");
 
-  return appelOpenAI(systemPrompt, userPrompt, 0.3, 4000);
+  return appelClaude(systemPrompt, userPrompt, 0.3, 4000);
 }
 
 // ============================================================
-// RÉDACTION ARTICLE LUCAS LUNES — OpenAI
+// RÉDACTION ARTICLE LUCAS LUNES — Claude Opus 4.6
 // ============================================================
 function redigerArticleLucasLunes(contexte, dossierRecherche) {
   var systemPrompt = [
@@ -322,51 +322,52 @@ function redigerArticleLucasLunes(contexte, dossierRecherche) {
     "Tisse les figures féminines du dossier de recherche."
   ].join("\n");
 
-  return appelOpenAI(systemPrompt, userPrompt, 0.7, 6000);
+  return appelClaude(systemPrompt, userPrompt, 0.7, 6000);
 }
 
 // ============================================================
-// APPEL OPENAI — Fonction utilitaire
+// APPEL CLAUDE OPUS 4.6 — API Anthropic
 // ============================================================
-function appelOpenAI(systemPrompt, userPrompt, temperature, maxTokens) {
-  if (!OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY non configuré. Remplir la variable en haut du script.");
+function appelClaude(systemPrompt, userPrompt, temperature, maxTokens) {
+  if (!ANTHROPIC_API_KEY) {
+    throw new Error("ANTHROPIC_API_KEY non configuré. Remplir la variable en haut du script.");
   }
 
   var payload = {
-    "model": OPENAI_MODEL,
-    "messages": [
-      {"role": "system", "content": systemPrompt},
-      {"role": "user", "content": userPrompt}
-    ],
+    "model": CLAUDE_MODEL,
+    "max_tokens": maxTokens,
     "temperature": temperature,
-    "max_tokens": maxTokens
+    "system": systemPrompt,
+    "messages": [
+      {"role": "user", "content": userPrompt}
+    ]
   };
 
   var options = {
     method: "post",
     contentType: "application/json",
     headers: {
-      "Authorization": "Bearer " + OPENAI_API_KEY
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01"
     },
     payload: JSON.stringify(payload),
     muteHttpExceptions: true
   };
 
-  var response = UrlFetchApp.fetch("https://api.openai.com/v1/chat/completions", options);
+  var response = UrlFetchApp.fetch("https://api.anthropic.com/v1/messages", options);
   var code = response.getResponseCode();
   var body = response.getContentText();
 
   if (code !== 200) {
-    throw new Error("OpenAI API erreur HTTP " + code + " : " + body.substring(0, 300));
+    throw new Error("Claude API erreur HTTP " + code + " : " + body.substring(0, 300));
   }
 
   var json = JSON.parse(body);
-  if (!json.choices || !json.choices[0] || !json.choices[0].message) {
-    throw new Error("Réponse OpenAI inattendue : " + body.substring(0, 300));
+  if (!json.content || !json.content[0] || !json.content[0].text) {
+    throw new Error("Réponse Claude inattendue : " + body.substring(0, 300));
   }
 
-  return json.choices[0].message.content;
+  return json.content[0].text;
 }
 
 // ============================================================
