@@ -470,6 +470,15 @@ function redigerArticleLucasLunes(contexte, dossierRecherche) {
     "    *Lucas Lunes*",
     "    *Quelque part entre deux pierres*",
     "",
+    "13. HASHTAGS SEO (OBLIGATOIRE — DERNIÈRE LIGNE DE L'ARTICLE)",
+    "    IMMÉDIATEMENT après la signature, ajouter UNE LIGNE VIDE puis UNE SEULE LIGNE avec les hashtags.",
+    "    Prendre le mot-clé principal et les mots-clés secondaires fournis dans les données.",
+    "    Les transformer en hashtags CamelCase sans espaces ni accents.",
+    "    Format exact : #MotCle1 #MotCle2 #MotCle3 #MotCle4 #MotCle5",
+    "    Exemple : si mot-clé principal = 'mines romaines' et secondaires = 'patrimoine UNESCO, León, or romain, paysage culturel'",
+    "    → #MinesRomaines #PatrimoineUnesco #Leon #OrRomain #PaysageCulturel",
+    "    Cette ligne de hashtags est la TOUTE DERNIÈRE chose de l'article. RIEN après.",
+    "",
     "RÈGLES STRICTES :",
     "- AUCUNE duplication du texte source ou du dossier de recherche.",
     "- AUCUNE liste encyclopédique de dates ou dimensions.",
@@ -482,8 +491,8 @@ function redigerArticleLucasLunes(contexte, dossierRecherche) {
     "- SEULE EXCEPTION : ## Légende locale est le seul sous-titre autorisé dans le corps.",
     "- Le texte doit couler comme un récit continu, pas comme un article structuré avec des sections.",
     "- PAS de gras ** dans le corps du texte sauf pour un nom propre cité pour la première fois.",
-    "- Les sections 9 à 12 (séparateur, question, invitation, signature) sont NON-NÉGOCIABLES.",
-    "- Si tu oublies les trois visiteurs, la question, l'invitation ou la signature, l'article est REJETÉ.",
+    "- Les sections 9 à 13 (séparateur, question, invitation, signature, hashtags) sont NON-NÉGOCIABLES.",
+    "- Si tu oublies les trois visiteurs, la question, l'invitation, la signature ou les hashtags, l'article est REJETÉ.",
     "",
     "PHOTOS WIKIMEDIA (OBLIGATOIRE — DANS LE CORPS DU TEXTE) :",
     "- Insérer 2 à 4 photos Wikimedia Commons DIRECTEMENT dans le texte, aux endroits pertinents.",
@@ -491,14 +500,7 @@ function redigerArticleLucasLunes(contexte, dossierRecherche) {
     "- Format EXACT de chaque insertion :",
     "  [INSÉRER PHOTO N — description : https://commons.wikimedia.org/wiki/File:NomDuFichier.jpg]",
     "- Les noms de fichiers Wikimedia DOIVENT être des fichiers qui existent réellement sur Commons.",
-    "- NE PAS regrouper les photos en fin d'article. Elles sont DISPERSÉES dans le texte.",
-    "",
-    "13. HASHTAGS SEO (OBLIGATOIRE — APRÈS la signature)",
-    "    Après la signature, ajouter une ligne vide puis les hashtags SEO.",
-    "    Utiliser le mot-clé principal et les mots-clés secondaires fournis.",
-    "    Format : #MotClé1 #MotClé2 #MotClé3 etc.",
-    "    Exemple : #PatrimoineEspagne #MonastèrePedralbes #Barcelone #CouronneAragon #ArtGothique",
-    "    Transformer chaque mot-clé en hashtag CamelCase sans espaces ni accents."
+    "- NE PAS regrouper les photos en fin d'article. Elles sont DISPERSÉES dans le texte."
   ].join("\n");
 
   var userPrompt = [
