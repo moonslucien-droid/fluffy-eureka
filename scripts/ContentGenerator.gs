@@ -563,7 +563,7 @@ function genererPhotoNanabana(articleFolder, articleId, lieu) {
       muteHttpExceptions: true
     };
 
-    var apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + GOOGLE_API_KEY;
+    var apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=" + GOOGLE_API_KEY;
     var response = UrlFetchApp.fetch(apiUrl, options);
     var code = response.getResponseCode();
     var body = response.getContentText();
@@ -792,20 +792,34 @@ function appelClaude(systemPrompt, userPrompt, temperature, maxTokens) {
     muteHttpExceptions: true
   };
 
-  var response = UrlFetchApp.fetch("https://api.anthropic.com/v1/messages", options);
-  var code = response.getResponseCode();
-  var body = response.getContentText();
+  var maxRetries = 3;
+  var retryDelay = 5000; // 5 secondes
 
-  if (code !== 200) {
-    throw new Error("Claude API erreur HTTP " + code + " : " + body.substring(0, 300));
+  for (var attempt = 0; attempt <= maxRetries; attempt++) {
+    var response = UrlFetchApp.fetch("https://api.anthropic.com/v1/messages", options);
+    var code = response.getResponseCode();
+    var body = response.getContentText();
+
+    if (code === 529 || code === 503) {
+      Logger.log("⏳ Claude API surchargée (HTTP " + code + "), tentative " + (attempt + 1) + "/" + (maxRetries + 1));
+      if (attempt < maxRetries) {
+        Utilities.sleep(retryDelay * (attempt + 1));
+        continue;
+      }
+      throw new Error("Claude API surchargée après " + (maxRetries + 1) + " tentatives.");
+    }
+
+    if (code !== 200) {
+      throw new Error("Claude API erreur HTTP " + code + " : " + body.substring(0, 300));
+    }
+
+    var json = JSON.parse(body);
+    if (!json.content || !json.content[0] || !json.content[0].text) {
+      throw new Error("Réponse Claude inattendue : " + body.substring(0, 300));
+    }
+
+    return json.content[0].text;
   }
-
-  var json = JSON.parse(body);
-  if (!json.content || !json.content[0] || !json.content[0].text) {
-    throw new Error("Réponse Claude inattendue : " + body.substring(0, 300));
-  }
-
-  return json.content[0].text;
 }
 
 // ============================================================
