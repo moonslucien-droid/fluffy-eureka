@@ -866,7 +866,61 @@ function appelClaude(systemPrompt, userPrompt, temperature, maxTokens) {
 }
 
 // ============================================================
-// GÉNÉRER 5 PROCHAINS ARTICLES — Propositions éditoriales
+// CRAWLER ARTEVIAJERO — Récupérer les URLs d'articles
+// ============================================================
+var ARTEVIAJERO_INDEX_PAGES = [
+  "https://arteviajero.com/articulos/",
+  "https://arteviajero.com/articulos/page/2/",
+  "https://arteviajero.com/articulos/page/3/",
+  "https://arteviajero.com/articulos/page/4/",
+  "https://arteviajero.com/articulos/page/5/",
+  "https://arteviajero.com/articulos/page/6/",
+  "https://arteviajero.com/articulos/page/7/",
+  "https://arteviajero.com/articulos/page/8/",
+  "https://arteviajero.com/articulos/page/9/",
+  "https://arteviajero.com/articulos/page/10/"
+];
+
+function crawlerArteviajero() {
+  var allUrls = [];
+
+  for (var p = 0; p < ARTEVIAJERO_INDEX_PAGES.length; p++) {
+    try {
+      var response = UrlFetchApp.fetch(ARTEVIAJERO_INDEX_PAGES[p], {
+        muteHttpExceptions: true,
+        headers: {"User-Agent": "LucasLunes-Editorial-Bot/1.0"}
+      });
+
+      if (response.getResponseCode() !== 200) {
+        Logger.log("⚠️ Page index " + (p + 1) + " : HTTP " + response.getResponseCode());
+        break; // Plus de pages
+      }
+
+      var html = response.getContentText();
+      // Extraire les liens vers les articles individuels
+      var regex = /href="(https:\/\/arteviajero\.com\/articulos\/[^"\/]+\/?)">/g;
+      var match;
+      while ((match = regex.exec(html)) !== null) {
+        var url = match[1].replace(/\/$/, ""); // Normaliser sans trailing slash
+        if (allUrls.indexOf(url) === -1) {
+          allUrls.push(url);
+        }
+      }
+
+      Logger.log("📄 Page index " + (p + 1) + " : " + allUrls.length + " articles trouvés au total");
+
+    } catch(e) {
+      Logger.log("❌ Erreur crawl page " + (p + 1) + " : " + e.toString());
+      break;
+    }
+  }
+
+  Logger.log("🔍 Total articles trouvés sur Arteviajero : " + allUrls.length);
+  return allUrls;
+}
+
+// ============================================================
+// GÉNÉRER 5 PROCHAINS ARTICLES — Depuis Arteviajero
 // ============================================================
 function genererProchainSujets() {
   var ss      = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -879,19 +933,43 @@ function genererProchainSujets() {
     col[headers[h]] = h;
   }
 
-  // 1. Déterminer la semaine et le prochain ID
+  // 1. Collecter les liens Arteviajero déjà dans la feuille
   var existingIds = [];
-  var existingLieux = [];
+  var existingLinks = [];
   for (var i = 1; i < data.length; i++) {
     var idCell = String(data[i][col["ID"]] || "").trim();
-    if (idCell) {
-      existingIds.push(idCell);
-      var lieuCell = String(data[i][col["Lieu"]] || "").trim();
-      if (lieuCell) existingLieux.push(lieuCell);
+    if (idCell) existingIds.push(idCell);
+    var linkCell = String(data[i][col["Lien Arteviajero"]] || "").trim().replace(/\/$/, "");
+    if (linkCell) existingLinks.push(linkCell);
+  }
+
+  Logger.log("📋 Articles déjà dans la feuille : " + existingLinks.length);
+
+  // 2. Crawler Arteviajero pour trouver tous les articles
+  Logger.log("🔍 Crawl d'Arteviajero en cours…");
+  var allUrls = crawlerArteviajero();
+
+  // 3. Filtrer : ne garder que les articles PAS encore dans la feuille
+  var newUrls = [];
+  for (var u = 0; u < allUrls.length; u++) {
+    var normalized = allUrls[u].replace(/\/$/, "");
+    if (existingLinks.indexOf(normalized) === -1) {
+      newUrls.push(normalized);
     }
   }
 
-  // Trouver la prochaine semaine à partir du dernier ID existant
+  Logger.log("🆕 Articles non encore couverts : " + newUrls.length);
+
+  if (newUrls.length === 0) {
+    Logger.log("⚠️ Aucun nouvel article trouvé sur Arteviajero");
+    SpreadsheetApp.getUi().alert("Aucun nouvel article trouvé sur Arteviajero qui ne soit pas déjà dans la feuille.");
+    return;
+  }
+
+  // 4. Prendre les 5 premiers nouveaux articles
+  var toProcess = newUrls.slice(0, 5);
+
+  // 5. Déterminer les prochains IDs
   var lastId = existingIds[existingIds.length - 1] || "";
   var weekMatch = lastId.match(/(\d{4})-W(\d{2})-(\d{2})/);
   var year = new Date().getFullYear();
@@ -908,20 +986,16 @@ function genererProchainSujets() {
       nextNum  = lastNum + 1;
     }
   } else {
-    // Calculer la semaine ISO actuelle
     var now = new Date();
     var janFirst = new Date(now.getFullYear(), 0, 1);
     nextWeek = Math.ceil((((now - janFirst) / 86400000) + janFirst.getDay() + 1) / 7);
     nextNum  = 1;
   }
 
-  var weekStr = String(nextWeek).length < 2 ? "0" + nextWeek : String(nextWeek);
-
-  // Générer les 5 IDs
   var newIds = [];
   var currentNum = nextNum;
   var currentWeek = nextWeek;
-  for (var n = 0; n < 5; n++) {
+  for (var n = 0; n < toProcess.length; n++) {
     if (currentNum > 5) {
       currentWeek++;
       currentNum = 1;
@@ -931,112 +1005,109 @@ function genererProchainSujets() {
     currentNum++;
   }
 
-  Logger.log("🔍 Génération de 5 sujets : " + newIds.join(", "));
-  Logger.log("📋 Lieux déjà couverts : " + existingLieux.length + " lieux");
+  Logger.log("🔄 Traitement de " + toProcess.length + " articles : " + newIds.join(", "));
 
-  // 2. Demander à Claude de proposer 5 sujets
-  var systemPrompt = [
-    "Tu es le directeur éditorial de Lucas Lunes, une newsletter sur le patrimoine de la péninsule ibérique.",
-    "",
-    "Tu dois proposer EXACTEMENT 5 nouveaux articles.",
-    "",
-    "RÈGLES :",
-    "- Alterner Espagne et Portugal.",
-    "- Varier les types de lieux : monastères, forteresses, villes historiques, ponts, cathédrales, palais, ruines, sites archéologiques…",
-    "- Chaque lieu doit avoir une histoire riche avec des personnages identifiables.",
-    "- Privilégier les lieux MOINS connus (pas l'Alhambra, pas Sintra, pas Ségovie, pas Lisbonne).",
-    "- Le mot-clé principal doit être un terme de recherche SEO réaliste en français.",
-    "- Les mots-clés secondaires : 3-5 termes liés, séparés par des virgules.",
-    "- L'angle éditorial : une phrase résumant l'approche narrative Lucas Lunes.",
-    "- Le plan suggéré : 3-4 lignes indiquant les moments clés du récit.",
-    "- Potentiel SEO : note de 1 à 5.",
-    "",
-    "FORMAT DE SORTIE STRICT — JSON array de 5 objets :",
-    "[",
-    "  {",
-    "    \"titre\": \"Le titre de l'article\",",
-    "    \"lieu\": \"Nom du lieu, Ville, Pays\",",
-    "    \"lien_arteviajero\": \"https://arteviajero.com/... ou vide si pas trouvé\",",
-    "    \"mot_cle_principal\": \"mot-clé SEO principal\",",
-    "    \"mots_cles_secondaires\": \"mot1, mot2, mot3\",",
-    "    \"potentiel_seo\": 3,",
-    "    \"figure_homme\": \"Nom (dates) — rôle\",",
-    "    \"figure_femme\": \"Nom (dates) — rôle\",",
-    "    \"figure_religieuse\": \"Nom (dates) — rôle ou ordre religieux\",",
-    "    \"angle_editorial\": \"L'angle narratif en une phrase\",",
-    "    \"plan_suggere\": \"Les moments clés du récit en 3-4 lignes\"",
-    "  }",
-    "]",
-    "",
-    "IMPORTANT : Réponds UNIQUEMENT avec le JSON, sans texte avant ni après."
-  ].join("\n");
-
-  var userPrompt = [
-    "Lieux DÉJÀ COUVERTS (NE PAS RÉPÉTER) :",
-    existingLieux.join(", ") || "(aucun)",
-    "",
-    "Propose 5 nouveaux lieux de patrimoine ibérique pour les articles " + newIds.join(", ") + ".",
-    "Alterne entre Espagne et Portugal.",
-    "Réponds en JSON uniquement."
-  ].join("\n");
-
-  var response = appelClaude(systemPrompt, userPrompt, 0.8, 4000);
-
-  // 3. Parser le JSON
-  var jsonMatch = response.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) {
-    Logger.log("❌ Réponse Claude non parseable : " + response.substring(0, 300));
-    SpreadsheetApp.getUi().alert("Erreur : Claude n'a pas retourné un JSON valide. Réessayez.");
-    return;
-  }
-
-  var sujets;
-  try {
-    sujets = JSON.parse(jsonMatch[0]);
-  } catch(e) {
-    Logger.log("❌ JSON invalide : " + e.toString());
-    SpreadsheetApp.getUi().alert("Erreur parsing JSON. Réessayez.");
-    return;
-  }
-
-  if (sujets.length !== 5) {
-    Logger.log("⚠️ Claude a proposé " + sujets.length + " sujets au lieu de 5");
-  }
-
-  // 4. Insérer les lignes dans la feuille
+  // 6. Pour chaque article : scraper le contenu, puis Claude extrait les métadonnées
   var today = Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy");
 
-  for (var s = 0; s < sujets.length && s < 5; s++) {
-    var sujet = sujets[s];
-    var articleId = newIds[s];
+  for (var a = 0; a < toProcess.length; a++) {
+    var articleUrl = toProcess[a];
+    var articleId  = newIds[a];
 
-    var newRow = [];
-    for (var c = 0; c < headers.length; c++) {
-      newRow.push("");
+    Logger.log("📖 Scraping : " + articleUrl);
+    var contenuBrut = scraperArteviajero(articleUrl);
+
+    if (!contenuBrut || contenuBrut.length < 100) {
+      Logger.log("⚠️ Contenu trop court pour : " + articleUrl);
+      continue;
     }
 
-    newRow[col["ID"]]                    = articleId;
-    newRow[col["Date"]]                  = today;
-    newRow[col["Titre"]]                 = sujet.titre || "";
-    newRow[col["Lieu"]]                  = sujet.lieu || "";
-    newRow[col["Lien Arteviajero"]]      = sujet.lien_arteviajero || "";
-    newRow[col["Mot-clé principal"]]      = sujet.mot_cle_principal || "";
-    newRow[col["Mots-clés secondaires"]]  = sujet.mots_cles_secondaires || "";
-    newRow[col["Potentiel SEO"]]          = sujet.potentiel_seo || 3;
-    newRow[col["Figure ♂"]]              = sujet.figure_homme || "";
-    newRow[col["Figure ♀"]]              = sujet.figure_femme || "";
-    newRow[col["Figure ✝"]]              = sujet.figure_religieuse || "";
-    newRow[col["Angle éditorial"]]        = sujet.angle_editorial || "";
-    newRow[col["Plan suggéré"]]           = sujet.plan_suggere || "";
-    newRow[col["Statut"]]                 = "À vérifier";
+    // Extraire le titre de l'URL comme fallback
+    var slugTitre = articleUrl.split("/articulos/")[1] || "";
+    slugTitre = slugTitre.replace(/-/g, " ").replace(/\/$/, "");
 
-    ws.appendRow(newRow);
-    Logger.log("✅ Sujet ajouté : " + articleId + " — " + sujet.titre);
+    Logger.log("🤖 Analyse Claude pour : " + slugTitre);
+
+    var systemPrompt = [
+      "Tu es le directeur éditorial de Lucas Lunes, newsletter sur le patrimoine ibérique.",
+      "On te donne le contenu scrapé d'un article d'Arteviajero.",
+      "Tu dois extraire les informations éditoriales pour produire un article Lucas Lunes.",
+      "",
+      "RÉPONDS UNIQUEMENT en JSON, un seul objet :",
+      "{",
+      "  \"titre\": \"Titre Lucas Lunes en français (pas le titre original)\",",
+      "  \"lieu\": \"Nom du lieu, Ville, Pays\",",
+      "  \"mot_cle_principal\": \"mot-clé SEO en français\",",
+      "  \"mots_cles_secondaires\": \"3-5 mots-clés séparés par virgules\",",
+      "  \"potentiel_seo\": 3,",
+      "  \"figure_homme\": \"Nom (dates) — rôle historique lié au lieu\",",
+      "  \"figure_femme\": \"Nom (dates) — rôle (OBLIGATOIRE, chercher une femme liée au lieu)\",",
+      "  \"figure_religieuse\": \"Nom ou ordre religieux lié au lieu\",",
+      "  \"angle_editorial\": \"L'angle narratif Lucas Lunes en une phrase\",",
+      "  \"plan_suggere\": \"3-4 lignes : moments clés du récit\"",
+      "}",
+      "",
+      "RÈGLES :",
+      "- Le titre doit être évocateur, style Lucas Lunes (pas encyclopédique).",
+      "- Toujours identifier une figure féminine, même si le contenu n'en mentionne pas explicitement.",
+      "- L'angle éditorial doit refléter la voix Lucas Lunes : contemplative, intime.",
+      "- Potentiel SEO de 1 à 5.",
+      "- JSON UNIQUEMENT, pas de texte avant ni après."
+    ].join("\n");
+
+    var userPrompt = [
+      "URL source : " + articleUrl,
+      "Slug : " + slugTitre,
+      "",
+      "CONTENU SCRAPÉ :",
+      contenuBrut.substring(0, 6000),
+      "",
+      "Extrais les métadonnées éditoriales. JSON uniquement."
+    ].join("\n");
+
+    try {
+      var response = appelClaude(systemPrompt, userPrompt, 0.5, 2000);
+
+      var jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        Logger.log("❌ JSON non trouvé pour : " + articleUrl);
+        continue;
+      }
+
+      var sujet = JSON.parse(jsonMatch[0]);
+
+      // Insérer la ligne dans la feuille
+      var newRow = [];
+      for (var c = 0; c < headers.length; c++) {
+        newRow.push("");
+      }
+
+      newRow[col["ID"]]                    = articleId;
+      newRow[col["Date"]]                  = today;
+      newRow[col["Titre"]]                 = sujet.titre || slugTitre;
+      newRow[col["Lieu"]]                  = sujet.lieu || "";
+      newRow[col["Lien Arteviajero"]]      = articleUrl;
+      newRow[col["Mot-clé principal"]]      = sujet.mot_cle_principal || "";
+      newRow[col["Mots-clés secondaires"]]  = sujet.mots_cles_secondaires || "";
+      newRow[col["Potentiel SEO"]]          = sujet.potentiel_seo || 3;
+      newRow[col["Figure ♂"]]              = sujet.figure_homme || "";
+      newRow[col["Figure ♀"]]              = sujet.figure_femme || "";
+      newRow[col["Figure ✝"]]              = sujet.figure_religieuse || "";
+      newRow[col["Angle éditorial"]]        = sujet.angle_editorial || "";
+      newRow[col["Plan suggéré"]]           = sujet.plan_suggere || "";
+      newRow[col["Statut"]]                 = "À vérifier";
+
+      ws.appendRow(newRow);
+      SpreadsheetApp.flush();
+      Logger.log("✅ Ajouté : " + articleId + " — " + (sujet.titre || slugTitre));
+
+    } catch(e) {
+      Logger.log("❌ Erreur traitement " + articleUrl + " : " + e.toString());
+    }
   }
 
-  SpreadsheetApp.flush();
-  Logger.log("✅ 5 nouveaux sujets ajoutés au pipeline !");
-  SpreadsheetApp.getUi().alert("5 nouveaux sujets ajoutés au pipeline !\n\nVérifiez les titres et passez-les en 'Brouillon' pour lancer la rédaction.");
+  Logger.log("✅ Nouveaux sujets ajoutés au pipeline !");
+  SpreadsheetApp.getUi().alert("Nouveaux sujets Arteviajero ajoutés !\n\nVérifiez les titres et passez-les en 'Brouillon' pour lancer la rédaction.");
 }
 
 // ============================================================
