@@ -723,6 +723,29 @@ function obtenirUrlDirecteWikimedia(filename) {
 }
 
 // ============================================================
+// RÉCUPÉRER L'ID UTILISATEUR SUBSTACK
+// ============================================================
+function obtenirSubstackUserId() {
+  var meUrl = "https://lucienmoons.substack.com/api/v1/me";
+  var options = {
+    method: "get",
+    headers: {"Cookie": SUBSTACK_COOKIE, "User-Agent": "Mozilla/5.0"},
+    muteHttpExceptions: true
+  };
+  var response = UrlFetchApp.fetch(meUrl, options);
+  var code = response.getResponseCode();
+  if (code === 200) {
+    var data = JSON.parse(response.getContentText());
+    if (data.id) {
+      Logger.log("✅ Substack user ID récupéré : " + data.id);
+      return data.id;
+    }
+  }
+  Logger.log("⚠️ Impossible de récupérer le user ID Substack (HTTP " + code + ")");
+  return null;
+}
+
+// ============================================================
 // POSTER SUR SUBSTACK
 // ============================================================
 function posterSurSubstack(titre, contenu) {
@@ -730,10 +753,15 @@ function posterSurSubstack(titre, contenu) {
     return {success: false, error: "SUBSTACK_COOKIE non configuré"};
   }
 
+  var userId = obtenirSubstackUserId();
+  if (!userId) {
+    return {success: false, error: "Impossible de récupérer le user ID Substack — cookie expiré ?"};
+  }
+
   var html    = convertirMarkdownEnHtml(contenu);
   var payload = JSON.stringify({
     "draft_title": titre, "draft_body": html,
-    "draft_subtitle": "", "draft_bylines": [{"id": -1, "is_guest": false}],
+    "draft_subtitle": "", "draft_bylines": [{"id": userId, "is_guest": false}],
     "section_chosen": false, "type": "newsletter"
   });
   var options = {
