@@ -809,22 +809,43 @@ function posterSurSubstack(titre, contenu) {
 // ============================================================
 function convertirMarkdownEnHtml(texte) {
   if (!texte) return "";
+
+  // Retirer le titre H1 (déjà dans draft_title de Substack)
+  texte = texte.replace(/^# .+$/m, "");
+
+  // Retirer la ligne métadonnées (mots / temps de lecture)
+  texte = texte.replace(/^\*\d+ mots — .+lecture\*$/m, "");
+
+  // Retirer les tags photo non résolus
   texte = texte.replace(/\[INSÉRER PHOTO \d+[^\]]*\]/g, "");
+  texte = texte.replace(/\[PHOTO LUCAS LUNES[^\]]*PLACEHOLDER\]/g, "");
+
+  // Convertir les photos Lucas Lunes avec URL
   texte = texte.replace(/\[PHOTO LUCAS LUNES[^\]]*: (https?:\/\/[^\]]+)\]/g,
     '<img src="$1" alt="Lucas Lunes" style="width:100%;max-width:600px;" />');
-  texte = texte.replace(/\[PHOTO LUCAS LUNES[^\]]*PLACEHOLDER\]/g, "");
+
+  // Convertir les URLs Drive en images
   texte = texte.replace(/(https:\/\/drive\.google\.com\/uc\?id=[^\s\)]+)/g,
     '<img src="$1" alt="Lucas Lunes" style="width:100%;max-width:600px;" />');
+
+  // Liens markdown
   texte = texte.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2">$1</a>');
+
+  // Gras et italique (gras AVANT italique pour éviter les conflits)
   texte = texte.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   texte = texte.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+
+  // Sous-titres
   texte = texte.replace(/^## (.+)$/gm, "<h2>$1</h2>");
-  texte = texte.replace(/^# (.+)$/gm, "<h1>$1</h1>");
+
+  // Séparateurs
   texte = texte.replace(/^---$/gm, "<hr/>");
+
+  // Convertir les paragraphes
   return texte.split(/\n\n+/).map(function(p) {
     p = p.trim();
     if (!p) return "";
-    if (p.startsWith("<img") || p.startsWith("<hr") || p.startsWith("<h1") || p.startsWith("<h2")) return p;
+    if (p.startsWith("<img") || p.startsWith("<hr") || p.startsWith("<h2")) return p;
     return "<p>" + p.replace(/\n/g, "<br/>") + "</p>";
   }).filter(function(p) { return p !== ""; }).join("\n");
 }
