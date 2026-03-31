@@ -480,10 +480,20 @@ function redigerArticleLucasLunes(contexte, dossierRecherche) {
     "- Les sections 9 à 12 (séparateur, question, invitation, signature) sont NON-NÉGOCIABLES.",
     "- Si tu oublies les trois visiteurs, la question, l'invitation ou la signature, l'article est REJETÉ.",
     "",
-    "INCLURE EN FIN D'ARTICLE (AVANT le séparateur ---) :",
-    "- Les photos Wikimedia Commons pertinentes sous la forme :",
+    "PHOTOS WIKIMEDIA (OBLIGATOIRE — DANS LE CORPS DU TEXTE) :",
+    "- Insérer 2 à 4 photos Wikimedia Commons DIRECTEMENT dans le texte, aux endroits pertinents.",
+    "- Chaque photo est insérée là où elle enrichit le récit (ex: après avoir décrit un cloître, insérer la photo du cloître).",
+    "- Format EXACT de chaque insertion :",
     "  [INSÉRER PHOTO N — description : https://commons.wikimedia.org/wiki/File:NomDuFichier.jpg]",
-    "- Suggérer 2 à 4 photos en lien avec le lieu."
+    "- Les noms de fichiers Wikimedia DOIVENT être des fichiers qui existent réellement sur Commons.",
+    "- NE PAS regrouper les photos en fin d'article. Elles sont DISPERSÉES dans le texte.",
+    "",
+    "13. HASHTAGS SEO (OBLIGATOIRE — APRÈS la signature)",
+    "    Après la signature, ajouter une ligne vide puis les hashtags SEO.",
+    "    Utiliser le mot-clé principal et les mots-clés secondaires fournis.",
+    "    Format : #MotClé1 #MotClé2 #MotClé3 etc.",
+    "    Exemple : #PatrimoineEspagne #MonastèrePedralbes #Barcelone #CouronneAragon #ArtGothique",
+    "    Transformer chaque mot-clé en hashtag CamelCase sans espaces ni accents."
   ].join("\n");
 
   var userPrompt = [
@@ -512,6 +522,7 @@ function redigerArticleLucasLunes(contexte, dossierRecherche) {
     "",
     "CHECKLIST OBLIGATOIRE — ton article DOIT contenir TOUS ces éléments :",
     "☐ Chapeau en italique (modèle exact)",
+    "☐ 2-4 photos Wikimedia insérées DANS le corps du texte aux endroits pertinents",
     "☐ TROIS visiteurs avec prénoms, dialogues, détails physiques (3+ phrases chacun)",
     "☐ Section ## Légende locale",
     "☐ Figures féminines du dossier de recherche tissées dans le récit",
@@ -521,6 +532,7 @@ function redigerArticleLucasLunes(contexte, dossierRecherche) {
     "☐ Séparateur ---",
     "☐ Invitation newsletter : **Tu veux recevoir chaque semaine une nouvelle chronique de Lucas Lunes ?** + Abonne-toi gratuitement et rejoins les voyageurs qui écoutent les pierres.",
     "☐ Signature : *Lucas Lunes* + *Quelque part entre deux pierres*",
+    "☐ Hashtags SEO (mot-clé principal + mots-clés secondaires en #CamelCase)",
     "",
     "Si un seul de ces éléments manque, l'article est REJETÉ."
   ].join("\n");
@@ -579,12 +591,22 @@ function reecritureFinaleLucasLunes(contexte, brouillonCorrige) {
     "Si le brouillon ne contient pas ces éléments de fin, tu DOIS les ajouter.",
     "L'invitation à la newsletter et la signature sont des textes EXACTS à reproduire mot pour mot.",
     "",
+    "4. PHOTOS WIKIMEDIA — Les balises [INSÉRER PHOTO] doivent rester dans le CORPS du texte,",
+    "   aux endroits pertinents (pas regroupées en fin). Si elles sont regroupées en fin, les redistribuer.",
+    "   Conserver le format exact : [INSÉRER PHOTO N — description : https://commons.wikimedia.org/wiki/File:...]",
+    "",
+    "5. HASHTAGS SEO — Après la signature, ajouter les hashtags SEO.",
+    "   Utiliser le mot-clé principal et les mots-clés secondaires en format #CamelCase.",
+    "   Si le brouillon n'en contient pas, les AJOUTER.",
+    "",
     "Le résultat doit être un texte PUBLIABLE, prêt pour Substack."
   ].join("\n");
 
   var userPrompt = [
     "LIEU : " + contexte.lieu,
     "TITRE : " + contexte.titre,
+    "MOT-CLÉ PRINCIPAL : " + (contexte.motClePrincipal || ""),
+    "MOTS-CLÉS SECONDAIRES : " + (contexte.motsClesSecondaires || ""),
     "",
     "BROUILLON CORRIGÉ PAR L'ÉDITEUR :",
     brouillonCorrige,
@@ -596,6 +618,7 @@ function reecritureFinaleLucasLunes(contexte, brouillonCorrige) {
     "",
     "CHECKLIST — vérifie que l'article final contient TOUS ces éléments :",
     "☐ Chapeau en italique (modèle exact)",
+    "☐ 2-4 photos Wikimedia insérées DANS le corps du texte (pas regroupées en fin)",
     "☐ TROIS visiteurs avec prénoms, dialogues, détails (3+ phrases chacun)",
     "☐ Section ## Légende locale",
     "☐ Scène de départ",
@@ -603,7 +626,8 @@ function reecritureFinaleLucasLunes(contexte, brouillonCorrige) {
     "☐ Question au lecteur en italique",
     "☐ Séparateur ---",
     "☐ Invitation newsletter (texte exact)",
-    "☐ Signature Lucas Lunes (texte exact)"
+    "☐ Signature Lucas Lunes (texte exact)",
+    "☐ Hashtags SEO (#CamelCase après la signature)"
   ].join("\n");
 
   return appelClaude(systemPrompt, userPrompt, 0.5, 8000);
