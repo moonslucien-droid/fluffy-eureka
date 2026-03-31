@@ -733,7 +733,8 @@ function posterSurSubstack(titre, contenu) {
   var html    = convertirMarkdownEnHtml(contenu);
   var payload = JSON.stringify({
     "draft_title": titre, "draft_body": html,
-    "draft_subtitle": "", "section_chosen": false, "type": "newsletter"
+    "draft_subtitle": "", "draft_bylines": [{"id": -1, "is_guest": false}],
+    "section_chosen": false, "type": "newsletter"
   });
   var options = {
     method: "post", contentType: "application/json",
