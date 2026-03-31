@@ -781,11 +781,14 @@ function posterSurSubstack(titre, contenu) {
     return {success: false, error: "Impossible de récupérer le user ID Substack — cookie expiré ?"};
   }
 
-  var html    = convertirMarkdownEnHtml(contenu);
+  var bodyJson = convertirMarkdownEnSubstackJson(contenu);
   var payload = JSON.stringify({
-    "draft_title": titre, "draft_body": html,
-    "draft_subtitle": "", "draft_bylines": [{"id": userId, "is_guest": false}],
-    "section_chosen": false, "type": "newsletter"
+    "draft_title": titre,
+    "draft_subtitle": "",
+    "draft_body": JSON.stringify(bodyJson),
+    "draft_bylines": [{"id": userId, "is_guest": false}],
+    "section_chosen": false,
+    "type": "newsletter"
   });
   var options = {
     method: "post", contentType: "application/json",
@@ -805,10 +808,10 @@ function posterSurSubstack(titre, contenu) {
 }
 
 // ============================================================
-// CONVERTIR MARKDOWN → HTML
+// CONVERTIR MARKDOWN → SUBSTACK JSON (ProseMirror)
 // ============================================================
-function convertirMarkdownEnHtml(texte) {
-  if (!texte) return "";
+function convertirMarkdownEnSubstackJson(texte) {
+  if (!texte) return {"type": "doc", "content": [{"type": "paragraph"}]};
 
   // Retirer le titre H1 (déjà dans draft_title de Substack)
   texte = texte.replace(/^# .+$/m, "");
@@ -820,34 +823,107 @@ function convertirMarkdownEnHtml(texte) {
   texte = texte.replace(/\[INSÉRER PHOTO \d+[^\]]*\]/g, "");
   texte = texte.replace(/\[PHOTO LUCAS LUNES[^\]]*PLACEHOLDER\]/g, "");
 
-  // Convertir les photos Lucas Lunes avec URL
-  texte = texte.replace(/\[PHOTO LUCAS LUNES[^\]]*: (https?:\/\/[^\]]+)\]/g,
-    '<img src="$1" alt="Lucas Lunes" style="width:100%;max-width:600px;" />');
+  // Découper en blocs (double saut de ligne)
+  var blocs = texte.split(/\n\n+/).map(function(b) { return b.trim(); }).filter(function(b) { return b !== ""; });
+  var content = [];
 
-  // Convertir les URLs Drive en images
-  texte = texte.replace(/(https:\/\/drive\.google\.com\/uc\?id=[^\s\)]+)/g,
-    '<img src="$1" alt="Lucas Lunes" style="width:100%;max-width:600px;" />');
+  for (var b = 0; b < blocs.length; b++) {
+    var bloc = blocs[b];
 
-  // Liens markdown
-  texte = texte.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2">$1</a>');
+    // Séparateur horizontal
+    if (bloc === "---") {
+      content.push({"type": "horizontal_rule"});
+      continue;
+    }
 
-  // Gras et italique (gras AVANT italique pour éviter les conflits)
-  texte = texte.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  texte = texte.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    // Sous-titre H2
+    var h2Match = bloc.match(/^## (.+)$/);
+    if (h2Match) {
+      content.push({
+        "type": "heading",
+        "attrs": {"level": 2},
+        "content": parserInline(h2Match[1])
+      });
+      continue;
+    }
 
-  // Sous-titres
-  texte = texte.replace(/^## (.+)$/gm, "<h2>$1</h2>");
+    // Image Drive URL seule sur une ligne
+    var imgMatch = bloc.match(/^(https:\/\/drive\.google\.com\/uc\?id=[^\s]+)$/);
+    if (imgMatch) {
+      content.push({
+        "type": "captionedImage",
+        "attrs": {"src": imgMatch[1], "fullscreen": false, "imageSize": "normal"}
+      });
+      continue;
+    }
 
-  // Séparateurs
-  texte = texte.replace(/^---$/gm, "<hr/>");
+    // Image avec tag PHOTO LUCAS LUNES
+    var photoMatch = bloc.match(/\[PHOTO LUCAS LUNES[^\]]*: (https?:\/\/[^\]]+)\]/);
+    if (photoMatch) {
+      content.push({
+        "type": "captionedImage",
+        "attrs": {"src": photoMatch[1], "fullscreen": false, "imageSize": "normal"}
+      });
+      continue;
+    }
 
-  // Convertir les paragraphes
-  return texte.split(/\n\n+/).map(function(p) {
-    p = p.trim();
-    if (!p) return "";
-    if (p.startsWith("<img") || p.startsWith("<hr") || p.startsWith("<h2")) return p;
-    return "<p>" + p.replace(/\n/g, "<br/>") + "</p>";
-  }).filter(function(p) { return p !== ""; }).join("\n");
+    // Paragraphe normal — parser le contenu inline (gras, italique, liens)
+    var inlineContent = parserInline(bloc);
+    if (inlineContent.length > 0) {
+      content.push({"type": "paragraph", "content": inlineContent});
+    }
+  }
+
+  if (content.length === 0) {
+    content.push({"type": "paragraph"});
+  }
+
+  return {"type": "doc", "content": content};
+}
+
+// ============================================================
+// PARSER INLINE — Gras, italique, liens dans un texte
+// ============================================================
+function parserInline(texte) {
+  // Remplacer les sauts de ligne simples par des espaces
+  texte = texte.replace(/\n/g, " ");
+
+  var nodes = [];
+  var regex = /(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(\[([^\]]+)\]\((https?:\/\/[^\)]+)\))/g;
+  var lastIndex = 0;
+  var match;
+
+  while ((match = regex.exec(texte)) !== null) {
+    // Texte avant le match
+    if (match.index > lastIndex) {
+      var before = texte.substring(lastIndex, match.index);
+      if (before) nodes.push({"type": "text", "text": before});
+    }
+
+    if (match[1]) {
+      // Gras **texte**
+      nodes.push({"type": "text", "text": match[2], "marks": [{"type": "bold"}]});
+    } else if (match[3]) {
+      // Italique *texte*
+      nodes.push({"type": "text", "text": match[4], "marks": [{"type": "italic"}]});
+    } else if (match[5]) {
+      // Lien [texte](url)
+      nodes.push({
+        "type": "text", "text": match[6],
+        "marks": [{"type": "link", "attrs": {"href": match[7]}}]
+      });
+    }
+
+    lastIndex = regex.lastIndex;
+  }
+
+  // Texte restant après le dernier match
+  if (lastIndex < texte.length) {
+    var remaining = texte.substring(lastIndex);
+    if (remaining) nodes.push({"type": "text", "text": remaining});
+  }
+
+  return nodes;
 }
 
 // ============================================================
