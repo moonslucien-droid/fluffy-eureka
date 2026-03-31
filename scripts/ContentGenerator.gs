@@ -866,6 +866,180 @@ function appelClaude(systemPrompt, userPrompt, temperature, maxTokens) {
 }
 
 // ============================================================
+// GÉNÉRER 5 PROCHAINS ARTICLES — Propositions éditoriales
+// ============================================================
+function genererProchainSujets() {
+  var ss      = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var ws      = ss.getSheetByName(SHEET_NAME);
+  var data    = ws.getDataRange().getValues();
+  var headers = data[0];
+
+  var col = {};
+  for (var h = 0; h < headers.length; h++) {
+    col[headers[h]] = h;
+  }
+
+  // 1. Déterminer la semaine et le prochain ID
+  var existingIds = [];
+  var existingLieux = [];
+  for (var i = 1; i < data.length; i++) {
+    var idCell = String(data[i][col["ID"]] || "").trim();
+    if (idCell) {
+      existingIds.push(idCell);
+      var lieuCell = String(data[i][col["Lieu"]] || "").trim();
+      if (lieuCell) existingLieux.push(lieuCell);
+    }
+  }
+
+  // Trouver la prochaine semaine à partir du dernier ID existant
+  var lastId = existingIds[existingIds.length - 1] || "";
+  var weekMatch = lastId.match(/(\d{4})-W(\d{2})-(\d{2})/);
+  var year = new Date().getFullYear();
+  var nextWeek, nextNum;
+
+  if (weekMatch) {
+    var lastWeek = parseInt(weekMatch[2]);
+    var lastNum  = parseInt(weekMatch[3]);
+    if (lastNum >= 5) {
+      nextWeek = lastWeek + 1;
+      nextNum  = 1;
+    } else {
+      nextWeek = lastWeek;
+      nextNum  = lastNum + 1;
+    }
+  } else {
+    // Calculer la semaine ISO actuelle
+    var now = new Date();
+    var janFirst = new Date(now.getFullYear(), 0, 1);
+    nextWeek = Math.ceil((((now - janFirst) / 86400000) + janFirst.getDay() + 1) / 7);
+    nextNum  = 1;
+  }
+
+  var weekStr = String(nextWeek).length < 2 ? "0" + nextWeek : String(nextWeek);
+
+  // Générer les 5 IDs
+  var newIds = [];
+  var currentNum = nextNum;
+  var currentWeek = nextWeek;
+  for (var n = 0; n < 5; n++) {
+    if (currentNum > 5) {
+      currentWeek++;
+      currentNum = 1;
+    }
+    var wStr = String(currentWeek).length < 2 ? "0" + currentWeek : String(currentWeek);
+    newIds.push(year + "-W" + wStr + "-0" + currentNum);
+    currentNum++;
+  }
+
+  Logger.log("🔍 Génération de 5 sujets : " + newIds.join(", "));
+  Logger.log("📋 Lieux déjà couverts : " + existingLieux.length + " lieux");
+
+  // 2. Demander à Claude de proposer 5 sujets
+  var systemPrompt = [
+    "Tu es le directeur éditorial de Lucas Lunes, une newsletter sur le patrimoine de la péninsule ibérique.",
+    "",
+    "Tu dois proposer EXACTEMENT 5 nouveaux articles.",
+    "",
+    "RÈGLES :",
+    "- Alterner Espagne et Portugal.",
+    "- Varier les types de lieux : monastères, forteresses, villes historiques, ponts, cathédrales, palais, ruines, sites archéologiques…",
+    "- Chaque lieu doit avoir une histoire riche avec des personnages identifiables.",
+    "- Privilégier les lieux MOINS connus (pas l'Alhambra, pas Sintra, pas Ségovie, pas Lisbonne).",
+    "- Le mot-clé principal doit être un terme de recherche SEO réaliste en français.",
+    "- Les mots-clés secondaires : 3-5 termes liés, séparés par des virgules.",
+    "- L'angle éditorial : une phrase résumant l'approche narrative Lucas Lunes.",
+    "- Le plan suggéré : 3-4 lignes indiquant les moments clés du récit.",
+    "- Potentiel SEO : note de 1 à 5.",
+    "",
+    "FORMAT DE SORTIE STRICT — JSON array de 5 objets :",
+    "[",
+    "  {",
+    "    \"titre\": \"Le titre de l'article\",",
+    "    \"lieu\": \"Nom du lieu, Ville, Pays\",",
+    "    \"lien_arteviajero\": \"https://arteviajero.com/... ou vide si pas trouvé\",",
+    "    \"mot_cle_principal\": \"mot-clé SEO principal\",",
+    "    \"mots_cles_secondaires\": \"mot1, mot2, mot3\",",
+    "    \"potentiel_seo\": 3,",
+    "    \"figure_homme\": \"Nom (dates) — rôle\",",
+    "    \"figure_femme\": \"Nom (dates) — rôle\",",
+    "    \"figure_religieuse\": \"Nom (dates) — rôle ou ordre religieux\",",
+    "    \"angle_editorial\": \"L'angle narratif en une phrase\",",
+    "    \"plan_suggere\": \"Les moments clés du récit en 3-4 lignes\"",
+    "  }",
+    "]",
+    "",
+    "IMPORTANT : Réponds UNIQUEMENT avec le JSON, sans texte avant ni après."
+  ].join("\n");
+
+  var userPrompt = [
+    "Lieux DÉJÀ COUVERTS (NE PAS RÉPÉTER) :",
+    existingLieux.join(", ") || "(aucun)",
+    "",
+    "Propose 5 nouveaux lieux de patrimoine ibérique pour les articles " + newIds.join(", ") + ".",
+    "Alterne entre Espagne et Portugal.",
+    "Réponds en JSON uniquement."
+  ].join("\n");
+
+  var response = appelClaude(systemPrompt, userPrompt, 0.8, 4000);
+
+  // 3. Parser le JSON
+  var jsonMatch = response.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) {
+    Logger.log("❌ Réponse Claude non parseable : " + response.substring(0, 300));
+    SpreadsheetApp.getUi().alert("Erreur : Claude n'a pas retourné un JSON valide. Réessayez.");
+    return;
+  }
+
+  var sujets;
+  try {
+    sujets = JSON.parse(jsonMatch[0]);
+  } catch(e) {
+    Logger.log("❌ JSON invalide : " + e.toString());
+    SpreadsheetApp.getUi().alert("Erreur parsing JSON. Réessayez.");
+    return;
+  }
+
+  if (sujets.length !== 5) {
+    Logger.log("⚠️ Claude a proposé " + sujets.length + " sujets au lieu de 5");
+  }
+
+  // 4. Insérer les lignes dans la feuille
+  var today = Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy");
+
+  for (var s = 0; s < sujets.length && s < 5; s++) {
+    var sujet = sujets[s];
+    var articleId = newIds[s];
+
+    var newRow = [];
+    for (var c = 0; c < headers.length; c++) {
+      newRow.push("");
+    }
+
+    newRow[col["ID"]]                    = articleId;
+    newRow[col["Date"]]                  = today;
+    newRow[col["Titre"]]                 = sujet.titre || "";
+    newRow[col["Lieu"]]                  = sujet.lieu || "";
+    newRow[col["Lien Arteviajero"]]      = sujet.lien_arteviajero || "";
+    newRow[col["Mot-clé principal"]]      = sujet.mot_cle_principal || "";
+    newRow[col["Mots-clés secondaires"]]  = sujet.mots_cles_secondaires || "";
+    newRow[col["Potentiel SEO"]]          = sujet.potentiel_seo || 3;
+    newRow[col["Figure ♂"]]              = sujet.figure_homme || "";
+    newRow[col["Figure ♀"]]              = sujet.figure_femme || "";
+    newRow[col["Figure ✝"]]              = sujet.figure_religieuse || "";
+    newRow[col["Angle éditorial"]]        = sujet.angle_editorial || "";
+    newRow[col["Plan suggéré"]]           = sujet.plan_suggere || "";
+    newRow[col["Statut"]]                 = "À vérifier";
+
+    ws.appendRow(newRow);
+    Logger.log("✅ Sujet ajouté : " + articleId + " — " + sujet.titre);
+  }
+
+  SpreadsheetApp.flush();
+  Logger.log("✅ 5 nouveaux sujets ajoutés au pipeline !");
+  SpreadsheetApp.getUi().alert("5 nouveaux sujets ajoutés au pipeline !\n\nVérifiez les titres et passez-les en 'Brouillon' pour lancer la rédaction.");
+}
+
+// ============================================================
 // TRIGGER — Vérifier toutes les 5 minutes
 // ============================================================
 function configurerTrigger() {
@@ -886,6 +1060,8 @@ function configurerTrigger() {
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu("🖊️ Lucas Lunes")
+    .addItem("Générer 5 prochains sujets", "genererProchainSujets")
+    .addSeparator()
     .addItem("Traiter le pipeline maintenant", "traiterPipeline")
     .addItem("Configurer le trigger automatique (5 min)", "configurerTrigger")
     .addToUi();
