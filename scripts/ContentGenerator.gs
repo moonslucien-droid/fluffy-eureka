@@ -73,7 +73,11 @@ function traiterPipeline() {
     }
   }
 
+  var traite = false; // UN SEUL article par exécution (limite 6 min Apps Script)
+
   for (var i = 1; i < data.length; i++) {
+    if (traite) break; // Déjà traité un article, on arrête
+
     var row    = data[i];
     var statut = String(row[col["Statut"]]).trim();
     var id     = String(row[col["ID"]]).trim();
@@ -109,10 +113,12 @@ function traiterPipeline() {
           Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm"));
 
         Logger.log("✅ Premier jet généré : " + id);
+        traite = true;
       } catch(e) {
         Logger.log("❌ Erreur premier jet " + id + " : " + e.toString());
         ws.getRange(i + 1, col["Statut"] + 1).setValue("Erreur rédaction");
         ws.getRange(i + 1, col["Notes"] + 1).setValue("Erreur : " + e.toString());
+        traite = true;
       }
     }
 
@@ -137,9 +143,11 @@ function traiterPipeline() {
           "\nPour relancer une réécriture : effacer cette note et corriger le texte.");
 
         Logger.log("✅ Texte final généré : " + id);
+        traite = true;
       } catch(e) {
         Logger.log("❌ Erreur réécriture " + id + " : " + e.toString());
         ws.getRange(i + 1, col["Notes"] + 1).setValue("Erreur réécriture : " + e.toString());
+        traite = true;
       }
     }
 
@@ -184,13 +192,19 @@ function traiterPipeline() {
           ws.getRange(i + 1, col["Notes"] + 1).setValue("Erreur Substack : " + result.error);
           Logger.log("❌ Erreur publication : " + result.error);
         }
+        traite = true;
 
       } catch(e) {
         Logger.log("❌ Erreur publication " + id + " : " + e.toString());
         ws.getRange(i + 1, col["Statut"] + 1).setValue("Erreur publication");
         ws.getRange(i + 1, col["Notes"] + 1).setValue("Erreur : " + e.toString());
+        traite = true;
       }
     }
+  }
+
+  if (!traite) {
+    Logger.log("✅ Rien à traiter — tous les articles sont à jour.");
   }
 }
 
