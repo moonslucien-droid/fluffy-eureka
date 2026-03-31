@@ -708,8 +708,15 @@ function telechargerPhotosWikipedia(contenu, articleId, folder) {
 }
 
 function obtenirUrlDirecteWikimedia(filename) {
+  // Décoder d'abord si déjà encodé (ex: %C3%A9 → é), puis ré-encoder proprement
+  var decodedFilename;
+  try {
+    decodedFilename = decodeURIComponent(filename);
+  } catch(e) {
+    decodedFilename = filename;
+  }
   var apiUrl = "https://commons.wikimedia.org/w/api.php?action=query&titles=File:"
-    + encodeURIComponent(filename) + "&prop=imageinfo&iiprop=url&format=json";
+    + encodeURIComponent(decodedFilename) + "&prop=imageinfo&iiprop=url&format=json";
   var response = UrlFetchApp.fetch(apiUrl, {muteHttpExceptions: true});
   if (response.getResponseCode() !== 200) return null;
   var json  = JSON.parse(response.getContentText());
@@ -726,22 +733,38 @@ function obtenirUrlDirecteWikimedia(filename) {
 // RÉCUPÉRER L'ID UTILISATEUR SUBSTACK
 // ============================================================
 function obtenirSubstackUserId() {
-  var meUrl = "https://lucienmoons.substack.com/api/v1/me";
-  var options = {
-    method: "get",
-    headers: {"Cookie": SUBSTACK_COOKIE, "User-Agent": "Mozilla/5.0"},
-    muteHttpExceptions: true
-  };
-  var response = UrlFetchApp.fetch(meUrl, options);
-  var code = response.getResponseCode();
-  if (code === 200) {
-    var data = JSON.parse(response.getContentText());
-    if (data.id) {
-      Logger.log("✅ Substack user ID récupéré : " + data.id);
-      return data.id;
+  // Essayer plusieurs endpoints connus pour récupérer le user ID
+  var endpoints = [
+    "https://substack.com/api/v1/user/profile/self",
+    "https://lucienmoons.substack.com/api/v1/user/profile/self",
+    "https://lucienmoons.substack.com/api/v1/me"
+  ];
+
+  for (var e = 0; e < endpoints.length; e++) {
+    try {
+      var options = {
+        method: "get",
+        headers: {"Cookie": SUBSTACK_COOKIE, "User-Agent": "Mozilla/5.0"},
+        muteHttpExceptions: true
+      };
+      var response = UrlFetchApp.fetch(endpoints[e], options);
+      var code = response.getResponseCode();
+
+      if (code === 200) {
+        var data = JSON.parse(response.getContentText());
+        var userId = data.id || (data.user && data.user.id) || null;
+        if (userId) {
+          Logger.log("✅ Substack user ID récupéré : " + userId + " (via " + endpoints[e] + ")");
+          return userId;
+        }
+      }
+      Logger.log("⚠️ Endpoint " + endpoints[e] + " : HTTP " + code);
+    } catch(err) {
+      Logger.log("⚠️ Erreur endpoint " + endpoints[e] + " : " + err.toString());
     }
   }
-  Logger.log("⚠️ Impossible de récupérer le user ID Substack (HTTP " + code + ")");
+
+  Logger.log("❌ Impossible de récupérer le user ID Substack — cookie expiré ?");
   return null;
 }
 
