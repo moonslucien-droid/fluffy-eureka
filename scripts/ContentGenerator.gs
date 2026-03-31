@@ -1,33 +1,58 @@
 // ============================================================
-// LUCAS LUNES — Générateur de contenu éditorial
+// LUCAS LUNES — Pipeline éditorial complet
 // Google Spreadsheet ID : 1zKtKH2eaaR3ZNQtVsS7ECffCrubmLIkQmC2BzNek2Qk
 // ============================================================
-// Ce script :
-//   1. Lit les lignes avec Statut = "À rédiger"
-//   2. Scrape le contenu brut depuis Arteviajero
-//   3. Génère un dossier de recherche historique (Claude Opus 4.6)
-//   4. Rédige l'article dans la voix Lucas Lunes (Claude Opus 4.6)
-//   5. Remplit la colonne "Contenu Substack"
-//   6. Passe le statut à "Brouillon"
+// FLUX :
+//   À vérifier → (humain approuve titre) → Brouillon
+//   Brouillon (sans contenu) → script écrit 1er jet → Brouillon (avec contenu)
+//   Brouillon → (humain corrige dans Contenu Substack) → Texte final
+//   Texte final → script réécrit version finale → Notes = "Réécriture finale OK"
+//   (humain peut re-corriger : effacer Notes → script réécrit à nouveau)
+//   Texte final → (humain valide) → À publier
+//   À publier → script génère photo Nanabana + sauvegarde Drive + publie Substack → Publié
 // ============================================================
 
-var SPREADSHEET_ID = "1zKtKH2eaaR3ZNQtVsS7ECffCrubmLIkQmC2BzNek2Qk";
-var SHEET_NAME     = "Pipeline Articles";
-var ANTHROPIC_API_KEY = ""; // À remplir : sk-ant-...
-var CLAUDE_MODEL     = "claude-opus-4-6";
+var SPREADSHEET_ID     = "1zKtKH2eaaR3ZNQtVsS7ECffCrubmLIkQmC2BzNek2Qk";
+var SHEET_NAME         = "Pipeline Articles";
+var ANTHROPIC_API_KEY  = ""; // À remplir dans Apps Script : sk-ant-...
+var CLAUDE_MODEL       = "claude-opus-4-6";
+var GOOGLE_API_KEY     = ""; // À remplir dans Apps Script : AIza...
+var LUCAS_LUNES_PHOTO_ID = "1ZFz-GMbrF96vF59fYL8iym9yPfuYpmqJ";
+var SUBSTACK_COOKIE    = ""; // À remplir : connect.sid=s%3A...
+var SUBSTACK_URL       = "https://lucienmoons.substack.com/api/v1/drafts";
+var DRIVE_FOLDER_NAME  = "Lucas Lunes — Production Hub";
+var MAC_BASE_PATH      = "/Users/lucienmoons/Desktop/2026 digital business AI ideas  2026 article patrimoine weekly";
 
 // ============================================================
-// COLONNES (index 0-based, mappées sur les en-têtes)
+// PROMPT NANABANA — Génération photo Lucas Lunes sur le lieu
 // ============================================================
-// ID | Date | Titre | Lieu | Lien Arteviajero | Mot-clé principal |
-// Mots-clés secondaires | Potentiel SEO | Figure ♂ | Figure ♀ |
-// Figure ✝ | Angle éditorial | Plan suggéré | Statut |
-// Date rédaction | Date à publier | Notes | Contenu Substack
+var NANABANA_BASE_PROMPT = [
+  "[SÉQUENCE DE CONSIGNES STRICTES : AUCUNE DÉVIATION DU SUJET AUTORISÉE. NE PAS CHANGER L'IDENTITÉ OU LES ACCESSOIRES.]",
+  "[SÉQUENCE DE CONSIGNES PRIORITAIRES : AUCUNE DÉVIATION DE L'IDENTITÉ FACIALE N'EST AUTORISÉE. UTILISER EXCLUSIVEMENT LA PHOTO DE RÉFÉRENCE COMME RÉFÉRENCE ABSOLUE POUR LE VISAGE.]",
+  "Une photographie de portrait ultra-réaliste, en très haute résolution, centrée et nette du personnage masculin âgé vu dans la photo de référence. L'objectif principal est de reproduire l'identité faciale exacte, sans aucune hallucination ou changement de personne.",
+  "",
+  "Description Physique et Identité Faciale (Respect strict requis) :",
+  "• Visage : Reproduire la structure faciale unique, les traits précis et l'expression du personnage de la photo de référence. Cela inclut le pli nasolabial marqué, la forme du nez, la structure de la mâchoire et, crucialement, les rides d'expression profondes et bien définies autour de la bouche et des yeux.",
+  "• Expression : Reproduire le sourire authentique, chaleureux et légèrement asymétrique, plissant les yeux.",
+  "• Détails de peau : La texture de la peau âgée doit être extrêmement détaillée : pores visibles, pigmentation naturelle, et surtout, les rides et plis spécifiques, notamment le pli sous l'œil gauche et les rides autour de la bouche, exactement comme dans la photo de référence.",
+  "",
+  "Description des Accessoires et Vêtements (Identiques à la photo de référence) :",
+  "• Couvre-chef : Un véritable chapeau Fedora de couleur kaki (vert olive), avec une bande d'imprimé léopard distincte et texturée autour de la couronne.",
+  "• Lunettes : Les lunettes de soleil spécifiques de style Wayfarer, avec la monture en écaille de tortue (brun moucheté) et des verres teintés en marron.",
+  "• Vêtements : La veste de style saharienne/militaire en coton de couleur kaki, avec quatre poches boutonnées à rabat et des pattes d'épaule, portée ouverte sur un t-shirt noir uni.",
+  "",
+  "Composition et Éclairage :",
+  "• Un plan moyen (mid-shot), cadré du buste à la tête, centré, avec le personnage regardant directement vers le lieu, ou la caméra.",
+  "• Éclairage : Un éclairage naturel diffus pour mettre en valeur les textures et les détails du visage sans créer d'ombres dures qui pourraient déformer les traits.",
+  "",
+  "Arrière-plan :",
+  "• IMPORTANT : Le personnage se trouve DEVANT {{LIEU}}. L'arrière-plan montre ce lieu historique de manière reconnaissable mais légèrement floutée (profondeur de champ), tout en maintenant le personnage comme point focal absolu."
+].join("\n");
 
 // ============================================================
-// POINT D'ENTRÉE — Générer le contenu pour les articles "À rédiger"
+// POINT D'ENTRÉE PRINCIPAL
 // ============================================================
-function genererContenuArticles() {
+function traiterPipeline() {
   var ss      = SpreadsheetApp.openById(SPREADSHEET_ID);
   var ws      = ss.getSheetByName(SHEET_NAME);
   var data    = ws.getDataRange().getValues();
@@ -38,10 +63,9 @@ function genererContenuArticles() {
     col[headers[h]] = h;
   }
 
-  // Vérification des colonnes requises
   var required = ["ID", "Titre", "Lieu", "Lien Arteviajero", "Statut", "Contenu Substack",
                   "Figure ♂", "Figure ♀", "Figure ✝", "Angle éditorial", "Plan suggéré",
-                  "Mot-clé principal", "Mots-clés secondaires"];
+                  "Mot-clé principal", "Mots-clés secondaires", "Notes"];
   for (var r = 0; r < required.length; r++) {
     if (col[required[r]] === undefined) {
       Logger.log("❌ Colonne manquante : " + required[r]);
@@ -51,71 +75,187 @@ function genererContenuArticles() {
 
   for (var i = 1; i < data.length; i++) {
     var row    = data[i];
-    var statut = row[col["Statut"]];
-    var id     = row[col["ID"]];
+    var statut = String(row[col["Statut"]]).trim();
+    var id     = String(row[col["ID"]]).trim();
+    var contenuExistant = String(row[col["Contenu Substack"]] || "").trim();
+    var notes  = String(row[col["Notes"]] || "").trim();
 
     if (!id) continue;
-    if (statut !== "À rédiger") continue;
 
-    Logger.log("🔄 Traitement de l'article : " + id + " — " + row[col["Titre"]]);
+    // ── BROUILLON sans contenu : générer le premier jet ──
+    if (statut === "Brouillon" && contenuExistant === "") {
+      Logger.log("🔄 Premier jet pour : " + id);
+      try {
+        ws.getRange(i + 1, col["Statut"] + 1).setValue("Rédaction en cours");
+        SpreadsheetApp.flush();
 
-    try {
-      // Mettre le statut en cours
-      ws.getRange(i + 1, col["Statut"] + 1).setValue("Rédaction en cours");
+        var contexte = extraireContexte(row, col);
 
-      // 1. Scraper le contenu brut depuis Arteviajero
-      var lienArteviajero = row[col["Lien Arteviajero"]];
-      var contenuBrut = "";
-      if (lienArteviajero) {
-        contenuBrut = scraperArteviajero(lienArteviajero);
+        Logger.log("📚 Recherche historique pour : " + contexte.lieu);
+        var dossierRecherche = genererRechercheHistorique(contexte);
+
+        Logger.log("✍️ Rédaction premier jet pour : " + contexte.lieu);
+        var article = redigerArticleLucasLunes(contexte, dossierRecherche);
+
+        // Ajouter le compteur de mots et temps de lecture sous le titre
+        article = ajouterMetadonnees(article);
+
+        ws.getRange(i + 1, col["Contenu Substack"] + 1).setValue(article);
+        ws.getRange(i + 1, col["Statut"] + 1).setValue("Brouillon");
+        ws.getRange(i + 1, col["Date rédaction"] + 1).setValue(
+          Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy")
+        );
+        ws.getRange(i + 1, col["Notes"] + 1).setValue("Premier jet généré le " +
+          Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm"));
+
+        Logger.log("✅ Premier jet généré : " + id);
+      } catch(e) {
+        Logger.log("❌ Erreur premier jet " + id + " : " + e.toString());
+        ws.getRange(i + 1, col["Statut"] + 1).setValue("Erreur rédaction");
+        ws.getRange(i + 1, col["Notes"] + 1).setValue("Erreur : " + e.toString());
       }
+    }
 
-      // 2. Préparer le contexte éditorial
-      var contexte = {
-        id:                id,
-        titre:             row[col["Titre"]],
-        lieu:              row[col["Lieu"]],
-        lien:              lienArteviajero,
-        motClePrincipal:   row[col["Mot-clé principal"]],
-        motsClesSecondaires: row[col["Mots-clés secondaires"]],
-        potentielSEO:      row[col["Potentiel SEO"]],
-        figureHomme:       row[col["Figure ♂"]],
-        figureFemme:       row[col["Figure ♀"]],
-        figureReligieuse:  row[col["Figure ✝"]],
-        angleEditorial:    row[col["Angle éditorial"]],
-        planSuggere:       row[col["Plan suggéré"]],
-        contenuBrut:       contenuBrut
-      };
+    // ── TEXTE FINAL : réécrire si pas encore fait ──
+    if (statut === "Texte final" && contenuExistant !== "" && notes.indexOf("Réécriture finale OK") === -1) {
+      Logger.log("🔄 Réécriture finale pour : " + id);
+      try {
+        ws.getRange(i + 1, col["Notes"] + 1).setValue("Réécriture en cours…");
+        SpreadsheetApp.flush();
 
-      // 3. Recherche historique
-      Logger.log("📚 Recherche historique pour : " + contexte.lieu);
-      var dossierRecherche = genererRechercheHistorique(contexte);
+        var contexte2 = extraireContexte(row, col);
 
-      // 4. Rédaction de l'article Lucas Lunes
-      Logger.log("✍️ Rédaction Lucas Lunes pour : " + contexte.lieu);
-      var article = redigerArticleLucasLunes(contexte, dossierRecherche);
+        Logger.log("✍️ Réécriture finale pour : " + contexte2.lieu);
+        var articleFinal = reecritureFinaleLucasLunes(contexte2, contenuExistant);
 
-      // 5. Remplir la colonne Contenu Substack
-      ws.getRange(i + 1, col["Contenu Substack"] + 1).setValue(article);
+        // Recalculer le compteur de mots et temps de lecture
+        articleFinal = ajouterMetadonnees(articleFinal);
 
-      // 6. Passer le statut à Brouillon + date de rédaction
-      ws.getRange(i + 1, col["Statut"] + 1).setValue("Brouillon");
-      ws.getRange(i + 1, col["Date rédaction"] + 1).setValue(
-        Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy")
-      );
+        ws.getRange(i + 1, col["Contenu Substack"] + 1).setValue(articleFinal);
+        ws.getRange(i + 1, col["Notes"] + 1).setValue("Réécriture finale OK — " +
+          Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm") +
+          "\nPour relancer une réécriture : effacer cette note et corriger le texte.");
 
-      Logger.log("✅ Article généré : " + id + " — " + contexte.titre);
+        Logger.log("✅ Texte final généré : " + id);
+      } catch(e) {
+        Logger.log("❌ Erreur réécriture " + id + " : " + e.toString());
+        ws.getRange(i + 1, col["Notes"] + 1).setValue("Erreur réécriture : " + e.toString());
+      }
+    }
 
-    } catch(e) {
-      Logger.log("❌ Erreur pour " + id + " : " + e.toString());
-      ws.getRange(i + 1, col["Statut"] + 1).setValue("Erreur rédaction");
-      ws.getRange(i + 1, col["Notes"] + 1).setValue("Erreur : " + e.toString());
+    // ── À PUBLIER : photo Nanabana + sauvegarder fichiers + publier Substack ──
+    if (statut === "À publier" && contenuExistant !== "") {
+      Logger.log("🔄 Publication pour : " + id);
+      try {
+        ws.getRange(i + 1, col["Statut"] + 1).setValue("Publication en cours");
+        SpreadsheetApp.flush();
+
+        var titre   = row[col["Titre"]];
+        var lieu    = row[col["Lieu"]];
+        var contenu = contenuExistant;
+
+        // 1. Créer le dossier article dans Google Drive
+        var articleFolder = creerDossierArticle(id);
+
+        // 2. Générer la photo Nanabana (Lucas Lunes sur le lieu)
+        Logger.log("🎨 Génération photo Nanabana pour : " + lieu);
+        genererPhotoNanabana(articleFolder, id, lieu);
+
+        // 3. Télécharger photos Wikimedia → dossier article
+        var contenuAvecPhotos = telechargerPhotosWikipedia(contenu, id, articleFolder);
+
+        // 4. Sauvegarder l'article Markdown dans le dossier Drive
+        sauvegarderArticleMarkdown(articleFolder, id, titre, contenuAvecPhotos);
+
+        // 5. Publier sur Substack
+        var result = posterSurSubstack(titre, contenuAvecPhotos);
+
+        if (result.success) {
+          ws.getRange(i + 1, col["Statut"] + 1).setValue("Publié");
+          ws.getRange(i + 1, col["Notes"] + 1).setValue(
+            "Publié le " + Utilities.formatDate(new Date(), "Europe/Paris", "dd/MM/yyyy HH:mm")
+            + " | draft_id=" + result.draft_id
+            + "\nDossier Drive : " + DRIVE_FOLDER_NAME + "/" + id
+            + "\nPhoto Nanabana générée"
+          );
+          Logger.log("✅ Publié : " + id + " — " + titre);
+        } else {
+          ws.getRange(i + 1, col["Statut"] + 1).setValue("Erreur publication");
+          ws.getRange(i + 1, col["Notes"] + 1).setValue("Erreur Substack : " + result.error);
+          Logger.log("❌ Erreur publication : " + result.error);
+        }
+
+      } catch(e) {
+        Logger.log("❌ Erreur publication " + id + " : " + e.toString());
+        ws.getRange(i + 1, col["Statut"] + 1).setValue("Erreur publication");
+        ws.getRange(i + 1, col["Notes"] + 1).setValue("Erreur : " + e.toString());
+      }
     }
   }
 }
 
 // ============================================================
-// SCRAPER ARTEVIAJERO — Extraction du contenu brut
+// AJOUTER MÉTADONNÉES — Nombre de mots + temps de lecture
+// ============================================================
+function ajouterMetadonnees(article) {
+  // Retirer l'ancienne ligne de métadonnées si elle existe
+  article = article.replace(/\n*\*\d+ mots — .*lecture\*\n*/g, "\n");
+
+  // Compter les mots (ignorer les balises markdown et les tags photo)
+  var textepur = article.replace(/\[INSÉRER PHOTO[^\]]*\]/g, "")
+                        .replace(/\[PHOTO LUCAS LUNES[^\]]*\]/g, "")
+                        .replace(/[#*_\[\]()]/g, "")
+                        .trim();
+  var mots = textepur.split(/\s+/).filter(function(w) { return w.length > 0; }).length;
+
+  // Temps de lecture (250 mots/minute)
+  var minutes = Math.ceil(mots / 250);
+
+  // Insérer après la première ligne (le titre)
+  var lignes = article.split("\n");
+  var titreLigne = 0;
+  for (var l = 0; l < lignes.length; l++) {
+    if (lignes[l].trim() !== "") {
+      titreLigne = l;
+      break;
+    }
+  }
+
+  // Insérer les métadonnées après le titre
+  lignes.splice(titreLigne + 1, 0, "", "*" + mots + " mots — " + minutes + " min de lecture*", "");
+
+  return lignes.join("\n");
+}
+
+// ============================================================
+// EXTRAIRE LE CONTEXTE D'UNE LIGNE
+// ============================================================
+function extraireContexte(row, col) {
+  var lienArteviajero = row[col["Lien Arteviajero"]];
+  var contenuBrut = "";
+  if (lienArteviajero) {
+    contenuBrut = scraperArteviajero(lienArteviajero);
+  }
+
+  return {
+    id:                 String(row[col["ID"]]).trim(),
+    titre:              row[col["Titre"]],
+    lieu:               row[col["Lieu"]],
+    lien:               lienArteviajero,
+    motClePrincipal:    row[col["Mot-clé principal"]],
+    motsClesSecondaires: row[col["Mots-clés secondaires"]],
+    potentielSEO:       row[col["Potentiel SEO"]],
+    figureHomme:        row[col["Figure ♂"]],
+    figureFemme:        row[col["Figure ♀"]],
+    figureReligieuse:   row[col["Figure ✝"]],
+    angleEditorial:     row[col["Angle éditorial"]],
+    planSuggere:        row[col["Plan suggéré"]],
+    contenuBrut:        contenuBrut
+  };
+}
+
+// ============================================================
+// SCRAPER ARTEVIAJERO
 // ============================================================
 function scraperArteviajero(url) {
   if (!url || url.toString().trim() === "") return "";
@@ -123,9 +263,7 @@ function scraperArteviajero(url) {
   try {
     var response = UrlFetchApp.fetch(url, {
       muteHttpExceptions: true,
-      headers: {
-        "User-Agent": "LucasLunes-Editorial-Bot/1.0"
-      }
+      headers: { "User-Agent": "LucasLunes-Editorial-Bot/1.0" }
     });
 
     if (response.getResponseCode() !== 200) {
@@ -134,27 +272,21 @@ function scraperArteviajero(url) {
     }
 
     var html = response.getContentText();
-
-    // Extraire le contenu principal (entre les balises article ou entry-content)
     var contenu = "";
 
-    // Tentative 1 : entry-content
     var matchContent = html.match(/<div[^>]*class="[^"]*entry-content[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<(?:footer|aside|nav|div[^>]*class="[^"]*(?:sidebar|comments|related))/i);
     if (matchContent) {
       contenu = matchContent[1];
     } else {
-      // Tentative 2 : article tag
       var matchArticle = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
       if (matchArticle) {
         contenu = matchArticle[1];
       } else {
-        // Tentative 3 : body brut (dernier recours)
         var matchBody = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
         if (matchBody) contenu = matchBody[1];
       }
     }
 
-    // Nettoyer le HTML → texte brut
     contenu = contenu.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
     contenu = contenu.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
     contenu = contenu.replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, "");
@@ -166,7 +298,6 @@ function scraperArteviajero(url) {
     contenu = contenu.replace(/&#\d+;/g, "");
     contenu = contenu.replace(/\s+/g, " ").trim();
 
-    // Limiter la taille pour l'API Claude
     if (contenu.length > 8000) {
       contenu = contenu.substring(0, 8000) + "…";
     }
@@ -232,7 +363,7 @@ function genererRechercheHistorique(contexte) {
 }
 
 // ============================================================
-// RÉDACTION ARTICLE LUCAS LUNES — Claude Opus 4.6
+// RÉDACTION PREMIER JET — Claude Opus 4.6
 // ============================================================
 function redigerArticleLucasLunes(contexte, dossierRecherche) {
   var systemPrompt = [
@@ -251,35 +382,47 @@ function redigerArticleLucasLunes(contexte, dossierRecherche) {
     "",
     "STRUCTURE OBLIGATOIRE :",
     "",
-    "1. OUVERTURE RITUELLE",
-    "   Commence TOUJOURS par : \"Que s'est-il passé ce jour-là, en Espagne…\"",
-    "   (ou \"Ce jour-là, au Portugal…\" si Portugal)",
+    "1. TITRE",
+    "   Le titre de l'article sur une seule ligne, en # (Markdown H1).",
     "",
-    "2. APPROCHE",
+    "2. CHAPEAU (PREMIÈRE PHRASE OBLIGATOIRE — en italique)",
+    "   Immédiatement après le titre, une phrase d'accroche en italique qui suit EXACTEMENT ce modèle :",
+    "   *Ta chronique de voyage en [Espagne/Portugal] sur [le lieu], avec [figure principale] ([dates]) au temps de [contexte historique de l'époque], tandis que [événement contemporain dans un autre pays].*",
+    "",
+    "   EXEMPLE : *Ta chronique de voyage en Espagne sur le Monastère de Pedralbes, avec Elisenda de Montcada (1292-1364) au temps de la Couronne d'Aragon triomphante, tandis qu'en France Philippe VI de Valois monte sur un trône contesté.*",
+    "",
+    "   Cette phrase est SACRÉE. Elle doit toujours suivre cette construction. Elle ancre le lieu dans son époque ET dans l'actualité d'un autre pays à la même période.",
+    "",
+    "3. APPROCHE",
     "   L'arrivée au lieu. Ce que le voyageur voit, entend, ressent en s'approchant.",
+    "   PAS de sous-titre. Le texte coule directement après le chapeau.",
     "",
-    "3. LE LIEU COMME PERSONNAGE",
+    "4. LE LIEU COMME PERSONNAGE",
     "   Le lieu n'est pas un décor. Décris-le comme une personne : sa posture, ses silences, ses cicatrices.",
+    "   PAS de sous-titre. Transition fluide depuis l'approche.",
     "",
-    "4. TROIS VISITEURS",
+    "5. TROIS VISITEURS",
     "   Introduis exactement TROIS visiteurs rencontrés au lieu :",
     "   - Fictifs mais plausibles",
     "   - Chacun perçoit le lieu différemment",
     "   - Brefs mais vivants : un geste, un mot, un silence",
+    "   PAS de sous-titre. Ils apparaissent naturellement dans le récit.",
     "",
-    "5. COUCHES HISTORIQUES",
+    "6. COUCHES HISTORIQUES",
     "   Tisse le contenu historique du dossier de recherche dans la narration.",
     "   L'histoire émerge par un nom gravé, une anomalie architecturale, une réflexion.",
     "   Les femmes du dossier de recherche DOIVENT apparaître dans le récit.",
+    "   PAS de sous-titre. L'histoire se mêle au récit.",
     "",
-    "6. LÉGENDE LOCALE",
-    "   Section obligatoire marquée '## Légende locale'",
+    "7. LÉGENDE LOCALE",
+    "   SEULE section avec un sous-titre : ## Légende locale",
     "   Une légende ou tradition locale liée au lieu.",
     "   Encadrée comme récit oral : 'On raconte que…' ou 'Les anciens disent…'",
     "",
-    "7. DÉPART",
+    "8. DÉPART",
     "   Terminer par le départ. Pas de conclusion ni de résumé.",
     "   Le sentiment de s'éloigner d'un lieu qui continuera d'exister sans toi.",
+    "   PAS de sous-titre.",
     "",
     "RÈGLES STRICTES :",
     "- AUCUNE duplication du texte source ou du dossier de recherche.",
@@ -287,9 +430,12 @@ function redigerArticleLucasLunes(contexte, dossierRecherche) {
     "- AUCUN marqueur IA : 'En conclusion', 'Il convient de noter', 'En effet'.",
     "- AUCUNE description générique — chaque phrase est spécifique à CE lieu.",
     "- Rigueur historique : tous les faits viennent du dossier de recherche.",
-    "- Longueur : 1500–2500 mots.",
+    "- Longueur : MINIMUM 1800 mots, idéalement 2000–2500 mots.",
     "- Langue : français.",
-    "- Format : Markdown propre.",
+    "- Format : texte narratif FLUIDE. PAS de sous-titres ## dans le corps du texte.",
+    "- SEULE EXCEPTION : ## Légende locale est le seul sous-titre autorisé.",
+    "- Le texte doit couler comme un récit continu, pas comme un article structuré avec des sections.",
+    "- PAS de gras ** dans le corps du texte sauf pour un nom propre cité pour la première fois.",
     "",
     "INCLURE EN FIN D'ARTICLE :",
     "- Les photos Wikimedia Commons pertinentes sous la forme :",
@@ -316,13 +462,305 @@ function redigerArticleLucasLunes(contexte, dossierRecherche) {
     contexte.contenuBrut || "(Aucun contenu source disponible)",
     "",
     "Rédige l'article complet Lucas Lunes.",
-    "Respecte la voix, la structure et les règles du system prompt.",
+    "COMMENCE par le titre en # puis IMMÉDIATEMENT le chapeau en italique.",
+    "Le chapeau suit EXACTEMENT le modèle : *Ta chronique de voyage en [pays] sur [lieu], avec [figure] ([dates]) au temps de [contexte], tandis que [événement contemporain ailleurs].*",
+    "Ensuite le texte coule SANS sous-titres, sauf ## Légende locale.",
+    "MINIMUM 1800 mots.",
     "Inclus la section Légende locale.",
     "Inclus les trois visiteurs.",
     "Tisse les figures féminines du dossier de recherche."
   ].join("\n");
 
-  return appelClaude(systemPrompt, userPrompt, 0.7, 6000);
+  return appelClaude(systemPrompt, userPrompt, 0.7, 8000);
+}
+
+// ============================================================
+// RÉÉCRITURE FINALE — Claude Opus 4.6
+// ============================================================
+function reecritureFinaleLucasLunes(contexte, brouillonCorrige) {
+  var systemPrompt = [
+    "Tu es Lucas Lunes. Tu reçois un brouillon d'article que tu as écrit,",
+    "qui a été corrigé et annoté par l'éditeur humain.",
+    "",
+    "Ta mission : réécrire l'article en version finale en tenant compte",
+    "de TOUTES les corrections et modifications de l'éditeur.",
+    "",
+    "RÈGLES :",
+    "- Respecter chaque correction de l'éditeur sans exception.",
+    "- Conserver ta voix Lucas Lunes (intime, contemplative, sans hâte).",
+    "- Polir le style : fluidité, rythme, transitions.",
+    "- Corriger toute maladresse restante.",
+    "- Le chapeau en italique doit rester en première position après le titre.",
+    "- Il doit suivre le modèle : *Ta chronique de voyage en [pays] sur [lieu], avec [figure] ([dates]) au temps de [contexte], tandis que [événement contemporain ailleurs].*",
+    "- PAS de sous-titres ## dans le corps du texte, SAUF ## Légende locale.",
+    "- Le texte doit couler comme un récit continu.",
+    "- MINIMUM 1800 mots.",
+    "- Format : Markdown propre.",
+    "- AUCUN marqueur IA.",
+    "- Conserver les balises [INSÉRER PHOTO] telles quelles.",
+    "",
+    "Le résultat doit être un texte PUBLIABLE, prêt pour Substack."
+  ].join("\n");
+
+  var userPrompt = [
+    "LIEU : " + contexte.lieu,
+    "TITRE : " + contexte.titre,
+    "",
+    "BROUILLON CORRIGÉ PAR L'ÉDITEUR :",
+    brouillonCorrige,
+    "",
+    "Réécris l'article en version finale publiable.",
+    "Intègre toutes les corrections de l'éditeur.",
+    "Polis le style et la fluidité.",
+    "MINIMUM 1800 mots."
+  ].join("\n");
+
+  return appelClaude(systemPrompt, userPrompt, 0.5, 8000);
+}
+
+// ============================================================
+// GÉNÉRER PHOTO NANABANA — Lucas Lunes sur le lieu
+// Utilise l'API Google Gemini avec la photo de référence
+// ============================================================
+function genererPhotoNanabana(articleFolder, articleId, lieu) {
+  try {
+    // 1. Télécharger la photo de référence de Lucas Lunes depuis Drive
+    var refFile = DriveApp.getFileById(LUCAS_LUNES_PHOTO_ID);
+    var refBlob = refFile.getBlob();
+    var refBase64 = Utilities.base64Encode(refBlob.getBytes());
+    var refMimeType = refBlob.getContentType();
+
+    // 2. Construire le prompt avec le lieu
+    var prompt = NANABANA_BASE_PROMPT.replace("{{LIEU}}", lieu);
+
+    // 3. Appeler l'API Gemini avec image de référence + prompt
+    var payload = {
+      "contents": [
+        {
+          "parts": [
+            {
+              "inlineData": {
+                "mimeType": refMimeType,
+                "data": refBase64
+              }
+            },
+            {
+              "text": prompt
+            }
+          ]
+        }
+      ],
+      "generationConfig": {
+        "responseModalities": ["IMAGE", "TEXT"],
+        "temperature": 0.4
+      }
+    };
+
+    var options = {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+
+    var apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + GOOGLE_API_KEY;
+    var response = UrlFetchApp.fetch(apiUrl, options);
+    var code = response.getResponseCode();
+    var body = response.getContentText();
+
+    if (code !== 200) {
+      Logger.log("⚠️ Nanabana API erreur HTTP " + code + " : " + body.substring(0, 300));
+      return null;
+    }
+
+    var json = JSON.parse(body);
+
+    // 4. Extraire l'image générée de la réponse
+    var candidates = json.candidates;
+    if (!candidates || !candidates[0] || !candidates[0].content || !candidates[0].content.parts) {
+      Logger.log("⚠️ Réponse Nanabana sans image : " + body.substring(0, 300));
+      return null;
+    }
+
+    var parts = candidates[0].content.parts;
+    var imageData = null;
+    var imageMimeType = "image/png";
+
+    for (var p = 0; p < parts.length; p++) {
+      if (parts[p].inlineData) {
+        imageData = parts[p].inlineData.data;
+        imageMimeType = parts[p].inlineData.mimeType || "image/png";
+        break;
+      }
+    }
+
+    if (!imageData) {
+      Logger.log("⚠️ Pas d'image dans la réponse Nanabana");
+      return null;
+    }
+
+    // 5. Sauvegarder l'image dans le dossier article
+    var extension = imageMimeType === "image/jpeg" ? ".jpg" : ".png";
+    var filename = articleId + "_nanabana_lucas_lunes" + extension;
+
+    var decoded = Utilities.base64Decode(imageData);
+    var blob = Utilities.newBlob(decoded, imageMimeType, filename);
+    var file = articleFolder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+    Logger.log("🎨 Photo Nanabana générée et sauvée : " + filename);
+    return "https://drive.google.com/uc?id=" + file.getId();
+
+  } catch(e) {
+    Logger.log("❌ Erreur Nanabana : " + e.toString());
+    return null;
+  }
+}
+
+// ============================================================
+// CRÉER DOSSIER ARTICLE — Google Drive
+// ============================================================
+function creerDossierArticle(articleId) {
+  var root = DriveApp.getRootFolder();
+  var parentFolders = root.getFoldersByName(DRIVE_FOLDER_NAME);
+  var parentFolder;
+  if (parentFolders.hasNext()) {
+    parentFolder = parentFolders.next();
+  } else {
+    parentFolder = root.createFolder(DRIVE_FOLDER_NAME);
+  }
+
+  var articleFolders = parentFolder.getFoldersByName(articleId);
+  if (articleFolders.hasNext()) {
+    return articleFolders.next();
+  }
+  var articleFolder = parentFolder.createFolder(articleId);
+  Logger.log("📁 Dossier créé dans Drive : " + DRIVE_FOLDER_NAME + "/" + articleId);
+  return articleFolder;
+}
+
+// ============================================================
+// SAUVEGARDER ARTICLE MARKDOWN
+// ============================================================
+function sauvegarderArticleMarkdown(folder, articleId, titre, contenu) {
+  var filename = articleId + " — " + titre.replace(/[\/\\:*?"<>|]/g, "-") + ".md";
+
+  var existingFiles = folder.getFilesByName(filename);
+  while (existingFiles.hasNext()) {
+    existingFiles.next().setTrashed(true);
+  }
+
+  var blob = Utilities.newBlob(contenu, "text/markdown", filename);
+  folder.createFile(blob);
+  Logger.log("💾 Article sauvegardé : " + filename);
+}
+
+// ============================================================
+// TÉLÉCHARGER PHOTOS WIKIPEDIA → dossier article Drive
+// ============================================================
+function telechargerPhotosWikipedia(contenu, articleId, folder) {
+  var regex    = /\[INSÉRER PHOTO \d+ — [^\]]*: (https:\/\/commons\.wikimedia\.org\/wiki\/File:[^\]]+)\]/g;
+  var match;
+  var resultat = contenu;
+
+  while ((match = regex.exec(contenu)) !== null) {
+    var fullTag  = match[0];
+    var wikiUrl  = match[1];
+    var filename = wikiUrl.split("File:")[1];
+
+    try {
+      var imageUrl = obtenirUrlDirecteWikimedia(filename);
+      if (!imageUrl) { Logger.log("⚠️ URL introuvable pour : " + filename); continue; }
+
+      var response = UrlFetchApp.fetch(imageUrl, {muteHttpExceptions: true});
+      if (response.getResponseCode() !== 200) {
+        Logger.log("⚠️ Téléchargement échoué (" + response.getResponseCode() + ") : " + filename);
+        continue;
+      }
+
+      var blob = response.getBlob().setName(articleId + "_" + filename);
+      var file = folder.createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      var driveUrl = "https://drive.google.com/uc?id=" + file.getId();
+
+      resultat = resultat.replace(fullTag, driveUrl);
+      Logger.log("✅ Photo sauvée : " + filename);
+
+    } catch(e) {
+      Logger.log("❌ Erreur photo " + filename + " : " + e.toString());
+    }
+  }
+  return resultat;
+}
+
+function obtenirUrlDirecteWikimedia(filename) {
+  var apiUrl = "https://commons.wikimedia.org/w/api.php?action=query&titles=File:"
+    + encodeURIComponent(filename) + "&prop=imageinfo&iiprop=url&format=json";
+  var response = UrlFetchApp.fetch(apiUrl, {muteHttpExceptions: true});
+  if (response.getResponseCode() !== 200) return null;
+  var json  = JSON.parse(response.getContentText());
+  var pages = json.query && json.query.pages;
+  if (!pages) return null;
+  for (var key in pages) {
+    var info = pages[key].imageinfo;
+    if (info && info[0] && info[0].url) return info[0].url;
+  }
+  return null;
+}
+
+// ============================================================
+// POSTER SUR SUBSTACK
+// ============================================================
+function posterSurSubstack(titre, contenu) {
+  if (!SUBSTACK_COOKIE) {
+    return {success: false, error: "SUBSTACK_COOKIE non configuré"};
+  }
+
+  var html    = convertirMarkdownEnHtml(contenu);
+  var payload = JSON.stringify({
+    "draft_title": titre, "draft_body": html,
+    "draft_subtitle": "", "section_chosen": false, "type": "newsletter"
+  });
+  var options = {
+    method: "post", contentType: "application/json",
+    headers: {"Cookie": SUBSTACK_COOKIE, "User-Agent": "Mozilla/5.0"},
+    payload: payload, muteHttpExceptions: true
+  };
+
+  var response = UrlFetchApp.fetch(SUBSTACK_URL, options);
+  var code = response.getResponseCode();
+  var body = response.getContentText();
+
+  if (code === 200 || code === 201) {
+    try { return {success: true, draft_id: JSON.parse(body).id || "ok"}; }
+    catch(e) { return {success: true, draft_id: "ok"}; }
+  }
+  return {success: false, error: "HTTP " + code + " — " + body.substring(0, 200)};
+}
+
+// ============================================================
+// CONVERTIR MARKDOWN → HTML
+// ============================================================
+function convertirMarkdownEnHtml(texte) {
+  if (!texte) return "";
+  texte = texte.replace(/\[INSÉRER PHOTO \d+[^\]]*\]/g, "");
+  texte = texte.replace(/\[PHOTO LUCAS LUNES[^\]]*: (https?:\/\/[^\]]+)\]/g,
+    '<img src="$1" alt="Lucas Lunes" style="width:100%;max-width:600px;" />');
+  texte = texte.replace(/\[PHOTO LUCAS LUNES[^\]]*PLACEHOLDER\]/g, "");
+  texte = texte.replace(/(https:\/\/drive\.google\.com\/uc\?id=[^\s\)]+)/g,
+    '<img src="$1" alt="Lucas Lunes" style="width:100%;max-width:600px;" />');
+  texte = texte.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2">$1</a>');
+  texte = texte.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  texte = texte.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  texte = texte.replace(/^## (.+)$/gm, "<h2>$1</h2>");
+  texte = texte.replace(/^# (.+)$/gm, "<h1>$1</h1>");
+  texte = texte.replace(/^---$/gm, "<hr/>");
+  return texte.split(/\n\n+/).map(function(p) {
+    p = p.trim();
+    if (!p) return "";
+    if (p.startsWith("<img") || p.startsWith("<hr") || p.startsWith("<h1") || p.startsWith("<h2")) return p;
+    return "<p>" + p.replace(/\n/g, "<br/>") + "</p>";
+  }).filter(function(p) { return p !== ""; }).join("\n");
 }
 
 // ============================================================
@@ -330,7 +768,7 @@ function redigerArticleLucasLunes(contexte, dossierRecherche) {
 // ============================================================
 function appelClaude(systemPrompt, userPrompt, temperature, maxTokens) {
   if (!ANTHROPIC_API_KEY) {
-    throw new Error("ANTHROPIC_API_KEY non configuré. Remplir la variable en haut du script.");
+    throw new Error("ANTHROPIC_API_KEY non configuré.");
   }
 
   var payload = {
@@ -371,45 +809,27 @@ function appelClaude(systemPrompt, userPrompt, temperature, maxTokens) {
 }
 
 // ============================================================
-// GÉNÉRER UN SEUL ARTICLE PAR ID
+// TRIGGER — Vérifier toutes les 5 minutes
 // ============================================================
-function genererArticleParId(articleId) {
-  var ss      = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var ws      = ss.getSheetByName(SHEET_NAME);
-  var data    = ws.getDataRange().getValues();
-  var headers = data[0];
-
-  var col = {};
-  for (var h = 0; h < headers.length; h++) {
-    col[headers[h]] = h;
-  }
-
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][col["ID"]] === articleId) {
-      // Forcer le statut pour traitement
-      ws.getRange(i + 1, col["Statut"] + 1).setValue("À rédiger");
-      SpreadsheetApp.flush();
-      genererContenuArticles();
-      return;
+function configurerTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === "traiterPipeline") {
+      ScriptApp.deleteTrigger(triggers[i]);
     }
   }
-  Logger.log("❌ Article non trouvé : " + articleId);
+  ScriptApp.newTrigger("traiterPipeline")
+    .timeBased().everyMinutes(5).create();
+  Logger.log("✅ Trigger configuré : traiterPipeline toutes les 5 minutes");
 }
 
 // ============================================================
-// RACCOURCI — Générer l'article 2026-W13-02
-// ============================================================
-function generer_2026_W13_02() {
-  genererArticleParId("2026-W13-02");
-}
-
-// ============================================================
-// CONFIGURER LE TRIGGER — Menu personnalisé
+// MENU PERSONNALISÉ
 // ============================================================
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu("🖊️ Lucas Lunes")
-    .addItem("Générer les articles 'À rédiger'", "genererContenuArticles")
-    .addItem("Générer article 2026-W13-02", "generer_2026_W13_02")
+    .addItem("Traiter le pipeline maintenant", "traiterPipeline")
+    .addItem("Configurer le trigger automatique (5 min)", "configurerTrigger")
     .addToUi();
 }
