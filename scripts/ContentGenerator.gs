@@ -86,17 +86,42 @@ function traiterPipeline() {
 
     if (!id) continue;
 
-    // ── BROUILLON sans contenu : générer le premier jet ──
-    if (statut === "Brouillon" && contenuExistant === "") {
-      Logger.log("🔄 Premier jet pour : " + id);
+    // ── BROUILLON sans contenu, ÉTAPE 1 : recherche historique ──
+    if (statut === "Brouillon" && contenuExistant === "" && notes.indexOf("RECHERCHE_OK:") === -1) {
+      Logger.log("🔄 Étape 1/2 — Recherche historique pour : " + id);
       try {
-        ws.getRange(i + 1, col["Statut"] + 1).setValue("Rédaction en cours");
+        ws.getRange(i + 1, col["Statut"] + 1).setValue("Recherche en cours");
         SpreadsheetApp.flush();
 
         var contexte = extraireContexte(row, col);
 
         Logger.log("📚 Recherche historique pour : " + contexte.lieu);
         var dossierRecherche = genererRechercheHistorique(contexte);
+
+        // Sauvegarder la recherche dans Notes pour l'étape 2
+        ws.getRange(i + 1, col["Notes"] + 1).setValue("RECHERCHE_OK:" + dossierRecherche);
+        ws.getRange(i + 1, col["Statut"] + 1).setValue("Brouillon");
+        SpreadsheetApp.flush();
+
+        Logger.log("✅ Recherche historique terminée pour : " + id + " — rédaction au prochain passage");
+        traite = true;
+      } catch(e) {
+        Logger.log("❌ Erreur recherche " + id + " : " + e.toString());
+        ws.getRange(i + 1, col["Statut"] + 1).setValue("Erreur rédaction");
+        ws.getRange(i + 1, col["Notes"] + 1).setValue("Erreur recherche : " + e.toString());
+        traite = true;
+      }
+    }
+
+    // ── BROUILLON sans contenu, ÉTAPE 2 : rédaction (recherche déjà faite) ──
+    if (statut === "Brouillon" && contenuExistant === "" && notes.indexOf("RECHERCHE_OK:") === 0) {
+      Logger.log("🔄 Étape 2/2 — Rédaction pour : " + id);
+      try {
+        ws.getRange(i + 1, col["Statut"] + 1).setValue("Rédaction en cours");
+        SpreadsheetApp.flush();
+
+        var contexte = extraireContexte(row, col);
+        var dossierRecherche = notes.substring("RECHERCHE_OK:".length);
 
         Logger.log("✍️ Rédaction premier jet pour : " + contexte.lieu);
         var article = redigerArticleLucasLunes(contexte, dossierRecherche);
@@ -121,7 +146,7 @@ function traiterPipeline() {
         Logger.log("✅ Premier jet généré : " + id);
         traite = true;
       } catch(e) {
-        Logger.log("❌ Erreur premier jet " + id + " : " + e.toString());
+        Logger.log("❌ Erreur rédaction " + id + " : " + e.toString());
         ws.getRange(i + 1, col["Statut"] + 1).setValue("Erreur rédaction");
         ws.getRange(i + 1, col["Notes"] + 1).setValue("Erreur : " + e.toString());
         traite = true;
