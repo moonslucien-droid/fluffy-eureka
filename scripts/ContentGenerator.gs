@@ -104,6 +104,12 @@ function traiterPipeline() {
         // Ajouter le compteur de mots et temps de lecture sous le titre
         article = ajouterMetadonnees(article);
 
+        // Sauvegarder dans Google Drive dès le premier jet
+        var articleFolder = creerDossierArticle(id);
+        var titre = row[col["Titre"]];
+        sauvegarderArticleMarkdown(articleFolder, id, titre, article);
+        Logger.log("💾 Premier jet sauvegardé dans Drive : " + DRIVE_FOLDER_NAME + "/" + id);
+
         ws.getRange(i + 1, col["Contenu Substack"] + 1).setValue(article);
         ws.getRange(i + 1, col["Statut"] + 1).setValue("Brouillon");
         ws.getRange(i + 1, col["Date rédaction"] + 1).setValue(
@@ -136,6 +142,12 @@ function traiterPipeline() {
 
         // Recalculer le compteur de mots et temps de lecture
         articleFinal = ajouterMetadonnees(articleFinal);
+
+        // Sauvegarder la version finale dans Google Drive
+        var articleFolder2 = creerDossierArticle(id);
+        var titre2 = row[col["Titre"]];
+        sauvegarderArticleMarkdown(articleFolder2, id, titre2, articleFinal);
+        Logger.log("💾 Texte final sauvegardé dans Drive : " + DRIVE_FOLDER_NAME + "/" + id);
 
         ws.getRange(i + 1, col["Contenu Substack"] + 1).setValue(articleFinal);
         ws.getRange(i + 1, col["Notes"] + 1).setValue("Réécriture finale OK — " +
